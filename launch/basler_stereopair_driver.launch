@@ -34,8 +34,7 @@
       <param name="UAV_NAME" type="string" value="$(arg UAV_NAME)"/>
 
       <!-- ROS parameters config file -->
-      <rosparam file="$(find basler_stereopair_driver)/config/default.yaml" />
-      <rosparam file="$(find basler_stereopair_driver)/config/$(arg RUN_TYPE).yaml" />
+      <rosparam file="$(find basler_stereopair_driver)/config/cameras_roi.yaml" />
 
       <!-- Subscribers (note that the topic names will also be remapped using the namespace as a prefix) -->
 

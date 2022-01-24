@@ -13,7 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   mrs_lib
   nav_msgs
-  
+  apriltag_ros
 )
 
 find_package(OpenCV REQUIRED)
