@@ -1,0 +1,5 @@
+<library path="lib/libBaslerStereoDriver">
+  <class name="basler_stereo_driver/BaslerStereoDriver" type="basler_stereo_driver::BaslerStereoDriver" base_class_type="nodelet::Nodelet">
+    <description>basler_stereopair_driver nodelet</description>
+  </class>
+</library>
