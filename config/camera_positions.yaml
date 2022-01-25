@@ -2,21 +2,7 @@
 
 fwd_left:
   rect_topic_name: "/basler_left/image_rect"
-  qw: 0.653
-  qx: 0.653
-  qy: -0.271
-  qz: -0.271
-  x: -0.5864
-  y: 0
-  z: 0.5864
 
 fwd_right:
   rect_topic_name: "/basler_right/image_rect"
-  qw: 0.271
-  qx: 0.271
-  qy: -0.653
-  qz: -0.653
-  x: 0.5864
-  y: 0
-  z: 0.5864
 
