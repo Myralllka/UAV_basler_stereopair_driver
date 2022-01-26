@@ -1,8 +1,0 @@
-# relative rotations and translations of cameras with respect to camera 1 (fwd left)
-
-fwd_left:
-  rect_topic_name: "/basler_left/image_rect"
-
-fwd_right:
-  rect_topic_name: "/basler_right/image_rect"
-

@@ -91,16 +91,10 @@ namespace basler_stereo_driver {
         } else if (n_l != std::string::npos) {
             m_pub_fleft_roi.publish(cv_ptr->toImageMsg());
         } else {
-            ROS_ERROR_THROTTLE(1.0, "[CameraLocalisation]: wrong header frame id: %s", msg->header.frame_id.c_str());
+            ROS_ERROR_THROTTLE(1.0, "[BaslerStereopairDriver]: wrong header frame id: %s", msg->header.frame_id.c_str());
             return;
         }
-        //std::cout << "[D][CameraLocalisation]:" << cv_ptr->header.frame_id << std::endl;
-        // chessboard detection
-        cv::Size pattern_size{9, 7};
-        cv::Size sqr_size{8, 8};
-        cv::Size zero_zone_size{-1, -1};
-        cv::Mat gray;
-        cv::cvtColor(cv_ptr->image, gray, cv::COLOR_BGR2GRAY);
+        std::cout << "[D][BaslerStereopairDriver]: Done " << cv_ptr->header.frame_id << std::endl;
 
         //if (pattern_found) {
         //    std::ostringstream filename;
