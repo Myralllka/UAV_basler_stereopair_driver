@@ -13,9 +13,13 @@ windows:
   - rqt_imgs:
       layout: tiled
       panes:
-        - waitForRos; rosrun rqt_image_view rqt_image_view /uav1/basler_stereo_driver/image_fwd_left_rect_cropped
-        - waitForRos; rosrun rqt_image_view rqt_image_view /uav1/basler_stereo_driver/image_fwd_right_rect_cropped
+        - waitForRos; rosrun rqt_image_view rqt_image_view /uav1/fleft/tag_detections_image
+        - waitForRos; rosrun rqt_image_view rqt_image_view /uav1/fright/tag_detections_image
   - uav_camera_localisation:
       layout: tiled
       panes:
         - waitForRos; roslaunch basler_stereopair_driver basler_stereopair_driver.launch
+  - rviz:
+      layout: tiled
+      panes:
+        - waitForRos; rviz

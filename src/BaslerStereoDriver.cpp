@@ -79,7 +79,7 @@ namespace basler_stereo_driver {
             return;
         }
 
-        cv_ptr->image = cv_ptr->image(m_roi);
+//        cv_ptr->image = cv_ptr->image(m_roi);
 
         cv_ptr->header.frame_id = msg->header.frame_id + "_roi";
 
