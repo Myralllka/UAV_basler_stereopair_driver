@@ -14,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   mrs_lib
   nav_msgs
   apriltag_ros
+  geometry_msgs
 )
 
 find_package(OpenCV REQUIRED)
@@ -21,7 +22,7 @@ find_package(OpenCV REQUIRED)
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES 
-  CATKIN_DEPENDS roscpp mrs_lib 
+  CATKIN_DEPENDS roscpp mrs_lib geometry_msgs
 )
 
 include_directories(include

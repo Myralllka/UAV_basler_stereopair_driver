@@ -22,4 +22,4 @@ windows:
   - rviz:
       layout: tiled
       panes:
-        - waitForRos; rviz
+        - waitForRos; rviz -d $(rospack find basler_stereopair_driver)/rviz/config.rviz

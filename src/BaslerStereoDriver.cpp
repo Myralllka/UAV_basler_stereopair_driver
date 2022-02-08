@@ -22,16 +22,8 @@ namespace basler_stereo_driver {
         /* (mrs_lib implementation checks whether the parameter was loaded or not) */
         mrs_lib::ParamLoader pl(nh, "BaslerStereoDriver");
 
-        int roi_start_x, roi_start_y, roi_h, roi_w;
         pl.loadParam("UAV_NAME", m_uav_name);
-        pl.loadParam("fwd_left/rect_topic_name", m_fleft_topic_name);
-        pl.loadParam("fwd_right/rect_topic_name", m_fright_topic_name);
-        pl.loadParam("start_x", roi_start_x);
-        pl.loadParam("start_y", roi_start_y);
-        pl.loadParam("h", roi_h);
-        pl.loadParam("w", roi_w);
 
-        m_roi = cv::Rect{roi_start_x, roi_start_y, roi_w, roi_h};
 
         if (!pl.loadedSuccessfully()) {
             ROS_ERROR("[BaslerStereoDriver]: failed to load non-optional parameters!");
@@ -42,25 +34,17 @@ namespace basler_stereo_driver {
         // | ---------------- some data post-processing --------------- |
 
         // | ----------------- publishers initialize ------------------ |
-        m_pub_fright_roi = nh.advertise<sensor_msgs::Image>("image_fwd_right_rect_cropped",
-                                                            8); // last param for queue size
-        m_pub_fleft_roi = nh.advertise<sensor_msgs::Image>("image_fwd_left_rect_cropped",
-                                                           8);
 
         // | ---------------- subscribers initialize ------------------ |
-        m_sub_fleft_rect = nh.subscribe(m_fleft_topic_name,
-                                        8,
-                                        &BaslerStereoDriver::m_callb_crop_image,
-                                        this); // second parameter for queue size
-        m_sub_fright_rect = nh.subscribe(m_fright_topic_name,
-                                         8,
-                                         &BaslerStereoDriver::m_callb_crop_image,
-                                         this);
 
         // | --------------------- tf transformer --------------------- |
-        m_transformer = mrs_lib::Transformer("BaslerStereoDriver", m_uav_name);
+        m_transformer = mrs_lib::Transformer("basler_stereo_driver", m_uav_name);
 
         // | -------------------- initialize timers ------------------- |
+
+        ROS_ASSERT("here");
+        m_tim_transformation = nh.createTimer(ros::Duration(m_time_transformation),
+                                              &BaslerStereoDriver::m_tim_callb_transformation, this);
         ROS_INFO_ONCE("[BaslerStereoDriver]: initialized");
 
         m_is_initialized = true;
@@ -69,40 +53,37 @@ namespace basler_stereo_driver {
 
 
 // | ---------------------- msg callbacks --------------------- |
-    void BaslerStereoDriver::m_callb_crop_image(const sensor_msgs::ImageConstPtr &msg) {
-        cv_bridge::CvImagePtr cv_ptr;
-        try {
-            cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
-        }
-        catch (cv_bridge::Exception &e) {
-            ROS_ERROR_THROTTLE(1.0, "[CameraLocalisation]: cv_bridge exception: %s", e.what());
-            return;
-        }
 
-//        cv_ptr->image = cv_ptr->image(m_roi);
-
-        cv_ptr->header.frame_id = msg->header.frame_id + "_roi";
-
-        auto n_r = cv_ptr->header.frame_id.find("right");
-        auto n_l = cv_ptr->header.frame_id.find("left");
-
-        if (n_r != std::string::npos) {
-            m_pub_fright_roi.publish(cv_ptr->toImageMsg());
-        } else if (n_l != std::string::npos) {
-            m_pub_fleft_roi.publish(cv_ptr->toImageMsg());
-        } else {
-            ROS_ERROR_THROTTLE(1.0, "[BaslerStereopairDriver]: wrong header frame id: %s", msg->header.frame_id.c_str());
-            return;
-        }
-        std::cout << "[D][BaslerStereopairDriver]: Done " << cv_ptr->header.frame_id << std::endl;
-
-        //if (pattern_found) {
-        //    std::ostringstream filename;
-        //    filename << "image_" << std::to_string(counter++) << ".png";
-        //    cv::imwrite(filename.str(), cv_ptr->image);
-        //}
-    }
 // | --------------------- timer callbacks -------------------- |
+
+
+    [[maybe_unused]] void BaslerStereoDriver::m_tim_callb_transformation([[maybe_unused]] const ros::TimerEvent &ev) {
+        ROS_INFO("\n\nhere\n\n");
+//        auto transformation = m_transformer.getTransform(
+//                "basler_right_optical/tag_1",
+//                "basler_left_optical/tag_1");
+//        if (transformation.has_value()) {
+//            std::cout << transformation->getTransform().transform << std::endl;
+//        } else {
+//            ROS_ASSERT("no transformation");
+//        }
+
+        geometry_msgs::TransformStamped to_left = geometry_msgs::TransformStamped();
+        to_left.transform.rotation.x = -0.653 ;
+        to_left.transform.rotation.y = 0.271 ;
+        to_left.transform.rotation.z = -0.271 ;
+        to_left.transform.rotation.w = 0.653;
+        to_left.transform.translation.x = 0.05864;
+        to_left.transform.translation.y = 0.05864;
+        to_left.transform.translation.z = 0;
+        to_left.header.stamp = ros::Time::now();
+//        to_left.header.frame_id = m_uav_name + "/basler_stereopair/base";
+        to_left.header.frame_id = "uav1/basler_stereopair/base";
+//        to_left.child_frame_id = m_uav_name + "/basler_stereopair/camera1_fleft_pose";
+        to_left.child_frame_id = "uav1/basler_left_optical";
+        b.sendTransform(to_left);
+        ROS_INFO("[basler_driver] transformstamped sent from %s to %s time %u", to_left.header.frame_id.c_str(), to_left.child_frame_id.c_str(), to_left.header.stamp.nsec);
+    }
 // | -------------------- other functions ------------------- |
 
 }  // namespace basler_stereo_driver  

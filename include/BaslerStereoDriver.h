@@ -5,6 +5,7 @@
 #include <ros/ros.h>
 #include <ros/package.h>
 #include <nodelet/nodelet.h>
+#include <geometry_msgs/TransformStamped.h>
 
 /* some STL includes */
 #include <cstdlib>
@@ -13,6 +14,7 @@
 /* custom helper functions from our library */
 #include <mrs_lib/param_loader.h>
 #include <mrs_lib/transformer.h>
+#include <mrs_lib/transform_broadcaster.h>
 
 /* other important includes */
 #include <nav_msgs/Odometry.h>
@@ -47,30 +49,24 @@ namespace basler_stereo_driver {
         std::string m_uav_name;
         std::string m_fleft_topic_name;
         std::string m_fright_topic_name;
+        float m_time_transformation{1};
 
+        mrs_lib::TransformBroadcaster b;
         /* other parameters */
-
-        cv::Rect m_roi;
         // | --------------------- MRS transformer -------------------- |
 
         mrs_lib::Transformer m_transformer;
 
         // | ---------------------- msg callbacks --------------------- |
-        [[maybe_unused]] void m_callb_crop_image([[maybe_unused]] const sensor_msgs::ImageConstPtr &msg);
 
         // | --------------------- timer callbacks -------------------- |
-        ros::Timer m_tim_example;
+        ros::Timer m_tim_transformation;
 
-        [[maybe_unused]] void m_tim_callb_example([[maybe_unused]] const ros::TimerEvent &ev);
+        [[maybe_unused]] void m_tim_callb_transformation([[maybe_unused]] const ros::TimerEvent &ev);
 
         // | ----------------------- publishers ----------------------- |
-        ros::Publisher m_pub_fright_roi;
-        ros::Publisher m_pub_fleft_roi;
         // | ----------------------- subscribers ---------------------- |
-        ros::Subscriber m_sub_fright_rect;
-        ros::Subscriber m_sub_fleft_rect;
         // | --------------------- other functions -------------------- |
-
         void m_cbk_tag_detection(const apriltag_ros::AprilTagDetectionArray msg);
     };
 //}
