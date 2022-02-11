@@ -43,8 +43,8 @@ namespace basler_stereo_driver {
         // | -------------------- initialize timers ------------------- |
 
         ROS_ASSERT("here");
-        m_tim_transformation = nh.createTimer(ros::Duration(m_time_transformation),
-                                              &BaslerStereoDriver::m_tim_callb_transformation, this);
+//        m_tim_transformation = nh.createTimer(ros::Duration(m_time_transformation),
+//                                              &BaslerStereoDriver::m_tim_callb_transformation, this);
         ROS_INFO_ONCE("[BaslerStereoDriver]: initialized");
 
         m_is_initialized = true;
@@ -58,31 +58,56 @@ namespace basler_stereo_driver {
 
 
     [[maybe_unused]] void BaslerStereoDriver::m_tim_callb_transformation([[maybe_unused]] const ros::TimerEvent &ev) {
-        ROS_INFO("\n\nhere\n\n");
-//        auto transformation = m_transformer.getTransform(
-//                "basler_right_optical/tag_1",
-//                "basler_left_optical/tag_1");
-//        if (transformation.has_value()) {
-//            std::cout << transformation->getTransform().transform << std::endl;
-//        } else {
-//            ROS_ASSERT("no transformation");
-//        }
+        double eps_x = 0, eps_y = 0, eps_z = 0;
+        if (!m_is_fixed) {
+            auto transformation = m_transformer.getTransform(
+                    "basler_right_optical/tag_1",
+                    "basler_left_optical/tag_1");
+            if (transformation.has_value()) {
+                std::cout << transformation->getTransform().transform << std::endl;
+                eps_x = transformation->getTransform().transform.translation.x;
+                eps_y = transformation->getTransform().transform.translation.y;
+                eps_z = transformation->getTransform().transform.translation.z;
+            } else {
+                ROS_WARN("no transformation");
+//            return;
+            }
+            m_is_fixed = true;
+        }
 
         geometry_msgs::TransformStamped to_left = geometry_msgs::TransformStamped();
-        to_left.transform.rotation.x = -0.653 ;
-        to_left.transform.rotation.y = 0.271 ;
-        to_left.transform.rotation.z = -0.271 ;
-        to_left.transform.rotation.w = 0.653;
-        to_left.transform.translation.x = 0.05864;
-        to_left.transform.translation.y = 0.05864;
-        to_left.transform.translation.z = 0;
+        to_left.transform.rotation.x = m_rotx;
+        to_left.transform.rotation.y = m_roty;
+        to_left.transform.rotation.z = m_rotz;
+        to_left.transform.rotation.w = m_rotw;
+        to_left.transform.translation.x = m_tranx - eps_x;
+        to_left.transform.translation.y = m_trany - eps_y;
+        to_left.transform.translation.z = m_tranz - eps_z;
         to_left.header.stamp = ros::Time::now();
 //        to_left.header.frame_id = m_uav_name + "/basler_stereopair/base";
         to_left.header.frame_id = "uav1/basler_stereopair/base";
 //        to_left.child_frame_id = m_uav_name + "/basler_stereopair/camera1_fleft_pose";
         to_left.child_frame_id = "uav1/basler_left_optical";
-        b.sendTransform(to_left);
-        ROS_INFO("[basler_driver] transformstamped sent from %s to %s time %u", to_left.header.frame_id.c_str(), to_left.child_frame_id.c_str(), to_left.header.stamp.nsec);
+        auto to_left_mrs = mrs_lib::TransformStamped(to_left.header.frame_id,
+                                                     to_left.child_frame_id,
+                                                     to_left.header.stamp,
+                                                     to_left);
+//        if (transformation.has_value()) {
+//            auto fixed_transform = m_transformer.transform(to_left_mrs, transformation->getTransform());
+//            if (fixed_transform.has_value()) {
+//                m_tbroadcaster.sendTransform(fixed_transform.value());
+//                ROS_INFO("[basler_driver] no error, publishing transformation");
+//            } else {
+//                ROS_INFO("[basler_driver] error during transformation");
+//                return;
+//            }
+//        } else {
+//        m_tbroadcaster.sendTransform(to_left_mrs.getTransform());
+        m_tbroadcaster.sendTransform(to_left);
+        ROS_WARN("[basler_driver] error, publishing to_left");
+//        }
+        ROS_INFO("[basler_driver] transform stamped sent from %s to %s time %u", to_left.header.frame_id.c_str(),
+                 to_left.child_frame_id.c_str(), to_left.header.stamp.nsec);
     }
 // | -------------------- other functions ------------------- |
 

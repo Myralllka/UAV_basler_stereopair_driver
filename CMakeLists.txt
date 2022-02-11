@@ -25,6 +25,10 @@ catkin_package(
   CATKIN_DEPENDS roscpp mrs_lib geometry_msgs
 )
 
+catkin_install_python(PROGRAMS scripts/pair_calibration_node.py
+        DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
 include_directories(include
   ${catkin_INCLUDE_DIRS}
 )

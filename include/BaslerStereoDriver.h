@@ -44,6 +44,7 @@ namespace basler_stereo_driver {
     private:
         /* flags */
         bool m_is_initialized = false;
+        bool m_is_fixed = false;
 
         /* ros parameters */
         std::string m_uav_name;
@@ -51,8 +52,18 @@ namespace basler_stereo_driver {
         std::string m_fright_topic_name;
         float m_time_transformation{1};
 
-        mrs_lib::TransformBroadcaster b;
+        mrs_lib::TransformBroadcaster m_tbroadcaster;
         /* other parameters */
+
+        /* estimated camera2 pose */
+        float m_rotx = -0.653;
+        float m_roty = 0.271;
+        float m_rotz = -0.271;
+        float m_rotw = 0.653;
+        float m_tranx = 0.07;
+        float m_trany = 0.07;
+        float m_tranz = 0;
+
         // | --------------------- MRS transformer -------------------- |
 
         mrs_lib::Transformer m_transformer;
