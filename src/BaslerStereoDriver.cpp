@@ -36,6 +36,15 @@ namespace basler_stereo_driver {
         // | ----------------- publishers initialize ------------------ |
 
         // | ---------------- subscribers initialize ------------------ |
+        m_sub_cfleft = nh.subscribe("/uav1/fleft/tag_detections",
+                                    1,
+                                    &BaslerStereoDriver::m_cbk_fleft_tag_detection,
+                                    this);
+
+        m_sub_cfright = nh.subscribe("/uav1/fright/tag_detections",
+                                     1,
+                                     &BaslerStereoDriver::m_cbk_fright_tag_detection,
+                                     this);
 
         // | --------------------- tf transformer --------------------- |
         m_transformer = mrs_lib::Transformer("basler_stereo_driver", m_uav_name);
@@ -53,56 +62,67 @@ namespace basler_stereo_driver {
 
 
 // | ---------------------- msg callbacks --------------------- |
+    void BaslerStereoDriver::m_cbk_fright_tag_detection(const apriltag_ros::AprilTagDetectionArray msg) {
+        ROS_INFO_THROTTLE(2.0, "[basler_stereo_driver]: right camera tags detection cbk");
+        if (msg.detections.empty()) {
+            ROS_WARN_THROTTLE(2.0, "[basler_stereo_driver]: no tags visible by right camera");
+            return;
+        }
+        m_right_detections = msg.detections;
+        std::sort(m_right_detections.begin(), m_right_detections.end() - 1, [](auto a, auto b) { return a.id < b.id; });
+        m_right_detections.pop_back();
+        ROS_INFO_THROTTLE(2.0, "[basler_stereo_driver]: right camera tags detection cbk complete");
+        std::cout << m_left_detections.back() << std::endl;
+    }
+
+
+    void BaslerStereoDriver::m_cbk_fleft_tag_detection(const apriltag_ros::AprilTagDetectionArray msg) {
+        ROS_INFO_THROTTLE(2.0, "[basler_stereo_driver]: left camera tags detection cbk");
+        if (msg.detections.empty()) {
+            ROS_WARN_THROTTLE(2.0, "[basler_stereo_driver]: no tags visible by left camera");
+            return;
+        }
+        m_left_detections = msg.detections;
+        std::sort(m_left_detections.begin(), m_left_detections.end() - 1, [](auto a, auto b) { return a.id < b.id; });
+        m_left_detections.pop_back();
+        ROS_INFO_THROTTLE(2.0, "[basler_stereo_driver]: left camera tags detection cbk complete");
+    }
+
 
 // | --------------------- timer callbacks -------------------- |
 
 
     [[maybe_unused]] void BaslerStereoDriver::m_tim_callb_transformation([[maybe_unused]] const ros::TimerEvent &ev) {
-        double eps_x = 0, eps_y = 0, eps_z = 0;
+        if (not m_is_initialized) return;
+
         if (!m_is_fixed) {
             auto transformation = m_transformer.getTransform(
                     "basler_right_optical/tag_1",
                     "basler_left_optical/tag_1");
             if (transformation.has_value()) {
                 std::cout << transformation->getTransform().transform << std::endl;
-                eps_x = transformation->getTransform().transform.translation.x;
-                eps_y = transformation->getTransform().transform.translation.y;
-                eps_z = transformation->getTransform().transform.translation.z;
             } else {
                 ROS_WARN("no transformation");
-//            return;
             }
             m_is_fixed = true;
         }
+
 
         geometry_msgs::TransformStamped to_left = geometry_msgs::TransformStamped();
         to_left.transform.rotation.x = m_rotx;
         to_left.transform.rotation.y = m_roty;
         to_left.transform.rotation.z = m_rotz;
         to_left.transform.rotation.w = m_rotw;
-        to_left.transform.translation.x = m_tranx - eps_x;
-        to_left.transform.translation.y = m_trany - eps_y;
-        to_left.transform.translation.z = m_tranz - eps_z;
+        to_left.transform.translation.x = m_tranx;
+        to_left.transform.translation.y = m_trany;
+        to_left.transform.translation.z = m_tranz;
         to_left.header.stamp = ros::Time::now();
-//        to_left.header.frame_id = m_uav_name + "/basler_stereopair/base";
         to_left.header.frame_id = "uav1/basler_stereopair/base";
-//        to_left.child_frame_id = m_uav_name + "/basler_stereopair/camera1_fleft_pose";
         to_left.child_frame_id = "uav1/basler_left_optical";
         auto to_left_mrs = mrs_lib::TransformStamped(to_left.header.frame_id,
                                                      to_left.child_frame_id,
                                                      to_left.header.stamp,
                                                      to_left);
-//        if (transformation.has_value()) {
-//            auto fixed_transform = m_transformer.transform(to_left_mrs, transformation->getTransform());
-//            if (fixed_transform.has_value()) {
-//                m_tbroadcaster.sendTransform(fixed_transform.value());
-//                ROS_INFO("[basler_driver] no error, publishing transformation");
-//            } else {
-//                ROS_INFO("[basler_driver] error during transformation");
-//                return;
-//            }
-//        } else {
-//        m_tbroadcaster.sendTransform(to_left_mrs.getTransform());
         m_tbroadcaster.sendTransform(to_left);
         ROS_WARN("[basler_driver] error, publishing to_left");
 //        }
@@ -111,7 +131,8 @@ namespace basler_stereo_driver {
     }
 // | -------------------- other functions ------------------- |
 
-}  // namespace basler_stereo_driver  
+
+}  // namespace basler_stereo_driver
 
 /* every nodelet must export its class as nodelet plugin */
 PLUGINLIB_EXPORT_CLASS(basler_stereo_driver::BaslerStereoDriver, nodelet::Nodelet)

@@ -46,12 +46,13 @@ class DemoNode:
         t.transform.translation.z = m_tranz
         br.sendTransform(t)
 
+        rospy.spin()
         print("sent pose")
         print("[basler calibration python] looking for transformation...")
         try:
             self.transformation_stamped = self.buffer.lookup_transform('uav1/basler_right_optical/tag_1',
                                                                        'uav1/basler_left_optical/tag_1',
-                                                                       rospy.Time(), rospy.Duration(2))
+                                                                       rospy.Time(0), rospy.Duration(2))
 
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException):
             print("[basler calibration python] no transformation found")
