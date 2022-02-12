@@ -68,11 +68,19 @@ namespace basler_stereo_driver {
             ROS_WARN_THROTTLE(2.0, "[basler_stereo_driver]: no tags visible by right camera");
             return;
         }
-        m_right_detections = msg.detections;
-        std::sort(m_right_detections.begin(), m_right_detections.end() - 1, [](auto a, auto b) { return a.id < b.id; });
-        m_right_detections.pop_back();
+        auto right_detections = msg.detections;
+        std::sort(right_detections.begin(), right_detections.end() - 1, [](auto a, auto b) { return a.id < b.id; });
+        right_detections.pop_back();
+
+        std::lock_guard<std::mutex> lt{m_mut_rtpose};
+        std::for_each(right_detections.begin(),
+                      right_detections.end(),
+                      [&](const auto &el) { m_right_tag_poses.push_back(el.pose.pose.pose.position); });
+        m_timestamp_frt = msg.header.stamp;
+        std::for_each(m_right_tag_poses.begin(),
+                      m_right_tag_poses.end(),
+                      [](auto &el) { std::cout << el << std::endl; });
         ROS_INFO_THROTTLE(2.0, "[basler_stereo_driver]: right camera tags detection cbk complete");
-        std::cout << m_left_detections.back() << std::endl;
     }
 
 
@@ -82,9 +90,18 @@ namespace basler_stereo_driver {
             ROS_WARN_THROTTLE(2.0, "[basler_stereo_driver]: no tags visible by left camera");
             return;
         }
-        m_left_detections = msg.detections;
-        std::sort(m_left_detections.begin(), m_left_detections.end() - 1, [](auto a, auto b) { return a.id < b.id; });
-        m_left_detections.pop_back();
+
+        auto left_detections = msg.detections;
+        std::sort(left_detections.begin(), left_detections.end() - 1, [](auto a, auto b) { return a.id < b.id; });
+        left_detections.pop_back();
+        std::lock_guard<std::mutex> lt{m_mut_ltpose};
+        std::for_each(left_detections.begin(),
+                      left_detections.end(),
+                      [&](const auto &el) { m_left_tag_poses.push_back(el.pose.pose.pose.position); });
+        m_timestamp_flt = msg.header.stamp;
+        std::for_each(m_left_tag_poses.begin(),
+                      m_left_tag_poses.end(),
+                      [](auto &el) { std::cout << el << std::endl; });
         ROS_INFO_THROTTLE(2.0, "[basler_stereo_driver]: left camera tags detection cbk complete");
     }
 

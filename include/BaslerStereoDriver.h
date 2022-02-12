@@ -10,6 +10,7 @@
 /* some STL includes */
 #include <cstdlib>
 #include <cstdio>
+#include <mutex>
 
 /* custom helper functions from our library */
 #include <mrs_lib/param_loader.h>
@@ -53,10 +54,16 @@ namespace basler_stereo_driver {
         std::string m_fright_topic_name;
         float m_time_transformation{1};
 
-        std::vector<apriltag_ros::AprilTagDetection> m_left_detections;
-        std::vector<apriltag_ros::AprilTagDetection> m_right_detections;
-
         mrs_lib::TransformBroadcaster m_tbroadcaster;
+
+        /* tag detection callback data */
+        std::vector<geometry_msgs::Point> m_left_tag_poses;
+        ros::Time m_timestamp_flt;
+        std::mutex m_mut_ltpose;
+        std::vector<geometry_msgs::Point> m_right_tag_poses;
+        ros::Time m_timestamp_frt;
+
+        std::mutex m_mut_rtpose;
         /* other parameters */
 
         /* estimated camera2 pose */
