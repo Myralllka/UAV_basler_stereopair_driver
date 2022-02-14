@@ -133,43 +133,43 @@ namespace basler_stereo_driver {
                 return;
             }
         }
-        std::cout << "here1\n";
         const auto d = 3;
         const auto m = 12;
 
         using mat_t = Eigen::Matrix<double, d, m>;
 
-        std::cout << "here2\n";
         auto src = mat_t{};
         auto dst = mat_t{};
         Eigen::Vector3d row_eigen;
         {
-
-            std::cout << "here3\n";
             std::lock_guard<std::mutex> lg_r{m_mut_rtpose};
-            for (int i = 0; i < m; ++i){
-                  tf2::fromMsg(m_right_tag_poses[i], row_eigen);
-                  src.block(0, i, d, 1) = row_eigen;
+            for (int i = 0; i < m; ++i) {
+                tf2::fromMsg(m_right_tag_poses[i], row_eigen);
+                src.block(0, i, d, 1) = row_eigen;
             }
-            std::cout << "here4\n";
         }
         {
-            std::cout << "here5\n";
             std::lock_guard<std::mutex> lg_l{m_mut_ltpose};
-            for (int i = 0; i < m; ++i){
+            for (int i = 0; i < m; ++i) {
                 tf2::fromMsg(m_left_tag_poses[i], row_eigen);
                 dst.block(0, i, d, 1) = row_eigen;
             }
-            std::cout << "here6\n";
         }
-
-
-        auto cR_t_umeyama = umeyama(src, dst);
-        std::cout << "here7\n";
-        std::cout << "*****************************************\n";
-        std::cout << src << std::endl;
-        std::cout << cR_t_umeyama << std::endl;
-        std::cout << "+++++++++++++++++++++++++++++++++++++++++\n";
+        // No way to directly cast to Eigen::Affine3d umeyama output
+        Eigen::Matrix4d translation = umeyama(src, dst);
+        Eigen::Affine3d translation_aff;
+        translation_aff = translation;
+        // And here I need affine translation
+        geometry_msgs::TransformStamped translation_msg = tf2::eigenToTransform(translation_aff);
+        // TODO: publish the corrected data, not just data
+        translation_msg.header.stamp = ros::Time::now();
+        translation_msg.header.frame_id = "uav1/basler_stereopair/base";
+        translation_msg.child_frame_id = "uav1/basler_left_optical";
+        auto to_left_mrs = mrs_lib::TransformStamped(translation_msg.header.frame_id,
+                                                     translation_msg.child_frame_id,
+                                                     translation_msg.header.stamp,
+                                                     translation_msg);
+        m_tbroadcaster.sendTransform(translation_msg);
     }
 
     void BaslerStereoDriver::m_tim_cbk_transformation([[maybe_unused]] const ros::TimerEvent &ev) {
@@ -188,22 +188,6 @@ namespace basler_stereo_driver {
         }
 
 
-        geometry_msgs::TransformStamped to_left = geometry_msgs::TransformStamped();
-        to_left.transform.rotation.x = m_rotx;
-        to_left.transform.rotation.y = m_roty;
-        to_left.transform.rotation.z = m_rotz;
-        to_left.transform.rotation.w = m_rotw;
-        to_left.transform.translation.x = m_tranx;
-        to_left.transform.translation.y = m_trany;
-        to_left.transform.translation.z = m_tranz;
-        to_left.header.stamp = ros::Time::now();
-        to_left.header.frame_id = "uav1/basler_stereopair/base";
-        to_left.child_frame_id = "uav1/basler_left_optical";
-        auto to_left_mrs = mrs_lib::TransformStamped(to_left.header.frame_id,
-                                                     to_left.child_frame_id,
-                                                     to_left.header.stamp,
-                                                     to_left);
-        m_tbroadcaster.sendTransform(to_left);
         ROS_WARN("[basler_driver] error, publishing to_left");
 //        }
         ROS_INFO("[basler_driver] transform stamped sent from %s to %s time %u", to_left.header.frame_id.c_str(),
