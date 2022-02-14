@@ -47,13 +47,21 @@ namespace basler_stereo_driver {
                                      this);
 
         // | --------------------- tf transformer --------------------- |
-        m_transformer = mrs_lib::Transformer("basler_stereo_driver", m_uav_name);
+        m_transformer = mrs_lib::Transformer("basler_stereo_driver",
+                                             m_uav_name);
 
         // | -------------------- initialize timers ------------------- |
 
-        ROS_ASSERT("here");
+        ROS_ASSERT("[basler stereo driver] timers initialisation");
+
+        m_tim_tags_coordinates = nh.createTimer(ros::Duration(m_time_tagcoor),
+                                                &BaslerStereoDriver::m_tim_cbk_tagcoor,
+                                                this);
+
 //        m_tim_transformation = nh.createTimer(ros::Duration(m_time_transformation),
-//                                              &BaslerStereoDriver::m_tim_callb_transformation, this);
+//                                              &BaslerStereoDriver::m_tim_cbk_transformation,
+//                                              this);
+
         ROS_INFO_ONCE("[BaslerStereoDriver]: initialized");
 
         m_is_initialized = true;
@@ -71,15 +79,16 @@ namespace basler_stereo_driver {
         auto right_detections = msg.detections;
         std::sort(right_detections.begin(), right_detections.end() - 1, [](auto a, auto b) { return a.id < b.id; });
         right_detections.pop_back();
-
+        if (right_detections.size() != 12) {
+            ROS_WARN_THROTTLE(1.0, "[basler stereo pair]: right camera: %zu out of 12 tags detected",
+                              right_detections.size());
+            return;
+        }
         std::lock_guard<std::mutex> lt{m_mut_rtpose};
         std::for_each(right_detections.begin(),
                       right_detections.end(),
                       [&](const auto &el) { m_right_tag_poses.push_back(el.pose.pose.pose.position); });
         m_timestamp_frt = msg.header.stamp;
-        std::for_each(m_right_tag_poses.begin(),
-                      m_right_tag_poses.end(),
-                      [](auto &el) { std::cout << el << std::endl; });
         ROS_INFO_THROTTLE(2.0, "[basler_stereo_driver]: right camera tags detection cbk complete");
     }
 
@@ -94,14 +103,16 @@ namespace basler_stereo_driver {
         auto left_detections = msg.detections;
         std::sort(left_detections.begin(), left_detections.end() - 1, [](auto a, auto b) { return a.id < b.id; });
         left_detections.pop_back();
+        if (left_detections.size() != 12) {
+            ROS_WARN_THROTTLE(1.0, "[basler stereo pair]: left camera: %zu out of 12 tags detected",
+                              left_detections.size());
+            return;
+        }
         std::lock_guard<std::mutex> lt{m_mut_ltpose};
         std::for_each(left_detections.begin(),
                       left_detections.end(),
                       [&](const auto &el) { m_left_tag_poses.push_back(el.pose.pose.pose.position); });
         m_timestamp_flt = msg.header.stamp;
-        std::for_each(m_left_tag_poses.begin(),
-                      m_left_tag_poses.end(),
-                      [](auto &el) { std::cout << el << std::endl; });
         ROS_INFO_THROTTLE(2.0, "[basler_stereo_driver]: left camera tags detection cbk complete");
     }
 
@@ -109,7 +120,59 @@ namespace basler_stereo_driver {
 // | --------------------- timer callbacks -------------------- |
 
 
-    [[maybe_unused]] void BaslerStereoDriver::m_tim_callb_transformation([[maybe_unused]] const ros::TimerEvent &ev) {
+    void BaslerStereoDriver::m_tim_cbk_tagcoor([[maybe_unused]] const ros::TimerEvent &ev) {
+        if (not m_is_initialized) return;
+        if (m_right_tag_poses.empty() or m_left_tag_poses.empty()) return;
+        {
+            std::lock_guard<std::mutex> lg{m_mut_rtpose};
+            std::lock_guard<std::mutex> lg2{m_mut_ltpose};
+
+            if (m_timestamp_frt - m_timestamp_flt > ros::Duration(0.001)) {
+                ROS_WARN_THROTTLE(1.0,
+                                  "[basler stereo driver]: tags coordinates timestamps are too far away from each other");
+                return;
+            }
+        }
+        std::cout << "here1\n";
+        const auto d = 3;
+        const auto m = 12;
+
+        using mat_t = Eigen::Matrix<double, d, m>;
+
+        std::cout << "here2\n";
+        auto src = mat_t{};
+        auto dst = mat_t{};
+        Eigen::Vector3d row_eigen;
+        {
+
+            std::cout << "here3\n";
+            std::lock_guard<std::mutex> lg_r{m_mut_rtpose};
+            for (int i = 0; i < m; ++i){
+                  tf2::fromMsg(m_right_tag_poses[i], row_eigen);
+                  src.block(0, i, d, 1) = row_eigen;
+            }
+            std::cout << "here4\n";
+        }
+        {
+            std::cout << "here5\n";
+            std::lock_guard<std::mutex> lg_l{m_mut_ltpose};
+            for (int i = 0; i < m; ++i){
+                tf2::fromMsg(m_left_tag_poses[i], row_eigen);
+                dst.block(0, i, d, 1) = row_eigen;
+            }
+            std::cout << "here6\n";
+        }
+
+
+        auto cR_t_umeyama = umeyama(src, dst);
+        std::cout << "here7\n";
+        std::cout << "*****************************************\n";
+        std::cout << src << std::endl;
+        std::cout << cR_t_umeyama << std::endl;
+        std::cout << "+++++++++++++++++++++++++++++++++++++++++\n";
+    }
+
+    void BaslerStereoDriver::m_tim_cbk_transformation([[maybe_unused]] const ros::TimerEvent &ev) {
         if (not m_is_initialized) return;
 
         if (!m_is_fixed) {

@@ -30,6 +30,8 @@
 #include "opencv2/calib3d.hpp"
 
 /* user includes */
+#include <Eigen/Core>
+#include <Eigen/Geometry>
 #include <Eigen/Geometry>
 
 //}
@@ -53,16 +55,18 @@ namespace basler_stereo_driver {
         std::string m_fleft_topic_name;
         std::string m_fright_topic_name;
         float m_time_transformation{1};
+        float m_time_tagcoor{0.1};
 
         mrs_lib::TransformBroadcaster m_tbroadcaster;
 
         /* tag detection callback data */
-        std::vector<geometry_msgs::Point> m_left_tag_poses;
-        ros::Time m_timestamp_flt;
-        std::mutex m_mut_ltpose;
-        std::vector<geometry_msgs::Point> m_right_tag_poses;
-        ros::Time m_timestamp_frt;
 
+        std::vector<geometry_msgs::Point> m_left_tag_poses;
+        ros::Time m_timestamp_flt{0};
+        std::mutex m_mut_ltpose;
+
+        std::vector<geometry_msgs::Point> m_right_tag_poses;
+        ros::Time m_timestamp_frt{0};
         std::mutex m_mut_rtpose;
         /* other parameters */
 
@@ -85,7 +89,11 @@ namespace basler_stereo_driver {
         // | --------------------- timer callbacks -------------------- |
         ros::Timer m_tim_transformation;
 
-        [[maybe_unused]] void m_tim_callb_transformation([[maybe_unused]] const ros::TimerEvent &ev);
+        ros::Timer m_tim_tags_coordinates;
+
+        [[maybe_unused]] void m_tim_cbk_transformation([[maybe_unused]] const ros::TimerEvent &ev);
+
+        [[maybe_unused]] void m_tim_cbk_tagcoor([[maybe_unused]] const ros::TimerEvent &ev);
 
         // | ----------------------- publishers ----------------------- |
 
