@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <mutex>
+#include <cmath>
 
 /* custom helper functions from our library */
 #include <mrs_lib/param_loader.h>
@@ -48,14 +49,13 @@ namespace basler_stereo_driver {
     private:
         /* flags */
         bool m_is_initialized = false;
-        bool m_is_fixed = false;
 
         /* ros parameters */
         std::string m_uav_name;
         std::string m_fleft_topic_name;
         std::string m_fright_topic_name;
         float m_time_transformation{1};
-        float m_time_tagcoor{0.1};
+        float m_time_tagcoor{0.0001};
 
         mrs_lib::TransformBroadcaster m_tbroadcaster;
 
@@ -68,6 +68,9 @@ namespace basler_stereo_driver {
         std::vector<geometry_msgs::Point> m_right_tag_poses;
         ros::Time m_timestamp_frt{0};
         std::mutex m_mut_rtpose;
+
+        mrs_lib::TransformStamped m_transform_msg;
+        std::mutex m_mut_transform_tags;
         /* other parameters */
 
         /* estimated camera2 pose */

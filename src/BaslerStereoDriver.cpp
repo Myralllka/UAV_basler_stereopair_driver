@@ -58,9 +58,19 @@ namespace basler_stereo_driver {
                                                 &BaslerStereoDriver::m_tim_cbk_tagcoor,
                                                 this);
 
-//        m_tim_transformation = nh.createTimer(ros::Duration(m_time_transformation),
-//                                              &BaslerStereoDriver::m_tim_cbk_transformation,
-//                                              this);
+        m_tim_transformation = nh.createTimer(ros::Duration(m_time_transformation),
+                                              &BaslerStereoDriver::m_tim_cbk_transformation,
+                                              this);
+
+        // initialize the corrected transformation
+        Eigen::Affine3d initial_aff_transform = Eigen::Affine3d::Identity();
+
+        geometry_msgs::TransformStamped transform_msg = tf2::eigenToTransform(initial_aff_transform);
+
+        m_transform_msg = mrs_lib::TransformStamped("basler_right_optical/tag_1",
+                                                    "basler_left_optical/tag_1",
+                                                    ros::Time::now(),
+                                                    transform_msg);
 
         ROS_INFO_ONCE("[BaslerStereoDriver]: initialized");
 
@@ -71,6 +81,7 @@ namespace basler_stereo_driver {
 
 // | ---------------------- msg callbacks --------------------- |
     void BaslerStereoDriver::m_cbk_fright_tag_detection(const apriltag_ros::AprilTagDetectionArray msg) {
+        if (not m_is_initialized) return;
         ROS_INFO_THROTTLE(2.0, "[basler_stereo_driver]: right camera tags detection cbk");
         if (msg.detections.empty()) {
             ROS_WARN_THROTTLE(2.0, "[basler_stereo_driver]: no tags visible by right camera");
@@ -94,6 +105,7 @@ namespace basler_stereo_driver {
 
 
     void BaslerStereoDriver::m_cbk_fleft_tag_detection(const apriltag_ros::AprilTagDetectionArray msg) {
+        if (not m_is_initialized) return;
         ROS_INFO_THROTTLE(2.0, "[basler_stereo_driver]: left camera tags detection cbk");
         if (msg.detections.empty()) {
             ROS_WARN_THROTTLE(2.0, "[basler_stereo_driver]: no tags visible by left camera");
@@ -118,20 +130,22 @@ namespace basler_stereo_driver {
 
 
 // | --------------------- timer callbacks -------------------- |
-
-
     void BaslerStereoDriver::m_tim_cbk_tagcoor([[maybe_unused]] const ros::TimerEvent &ev) {
+        // timer callback will find a 3d position of tags in space from two cameras and
+        // save them as a mrs_lib::TransformStamped
+
         if (not m_is_initialized) return;
         if (m_right_tag_poses.empty() or m_left_tag_poses.empty()) return;
         {
             std::lock_guard<std::mutex> lg{m_mut_rtpose};
             std::lock_guard<std::mutex> lg2{m_mut_ltpose};
 
-            if (m_timestamp_frt - m_timestamp_flt > ros::Duration(0.001)) {
-                ROS_WARN_THROTTLE(1.0,
-                                  "[basler stereo driver]: tags coordinates timestamps are too far away from each other");
-                return;
-            }
+//            if (std::abs(m_timestamp_frt.toSec() - m_timestamp_flt.toSec()) > ros::Duration(0.01).toSec()) {
+//                ROS_WARN_THROTTLE(1.0,
+//                                  "[basler stereo driver]: tags coordinates timestamps are too far away from each other: %f",
+//                                  std::abs(m_timestamp_frt.toSec() - m_timestamp_flt.toSec()));
+//                return;
+//            }
         }
         const auto d = 3;
         const auto m = 12;
@@ -155,43 +169,72 @@ namespace basler_stereo_driver {
                 dst.block(0, i, d, 1) = row_eigen;
             }
         }
-        // No way to directly cast to Eigen::Affine3d umeyama output
+        // No way to directly cast umeyama output to Eigen::Affine3d
         Eigen::Matrix4d translation = umeyama(src, dst);
         Eigen::Affine3d translation_aff;
         translation_aff = translation;
-        // And here I need affine translation
-        geometry_msgs::TransformStamped translation_msg = tf2::eigenToTransform(translation_aff);
-        // TODO: publish the corrected data, not just data
-        translation_msg.header.stamp = ros::Time::now();
-        translation_msg.header.frame_id = "uav1/basler_stereopair/base";
-        translation_msg.child_frame_id = "uav1/basler_left_optical";
-        auto to_left_mrs = mrs_lib::TransformStamped(translation_msg.header.frame_id,
-                                                     translation_msg.child_frame_id,
-                                                     translation_msg.header.stamp,
-                                                     translation_msg);
-        m_tbroadcaster.sendTransform(translation_msg);
+        // And here affine transformation is needed
+        std::lock_guard<std::mutex> ltr{m_mut_transform_tags};
+        geometry_msgs::TransformStamped transform_msg = tf2::eigenToTransform(translation_aff);
+        m_transform_msg = mrs_lib::TransformStamped("basler_right_optical/tag_1",
+                                                    "basler_left_optical/tag_1",
+                                                    ros::Time::now(),
+                                                    transform_msg);
     }
 
     void BaslerStereoDriver::m_tim_cbk_transformation([[maybe_unused]] const ros::TimerEvent &ev) {
+        // timer callback to publish camera position firstly as uncorrected estimation of a position (from CAD)
+        // and then - corrected using least-squares solution for two sets of points
+
         if (not m_is_initialized) return;
 
-        if (!m_is_fixed) {
-            auto transformation = m_transformer.getTransform(
-                    "basler_right_optical/tag_1",
-                    "basler_left_optical/tag_1");
-            if (transformation.has_value()) {
-                std::cout << transformation->getTransform().transform << std::endl;
-            } else {
-                ROS_WARN("no transformation");
-            }
-            m_is_fixed = true;
+        geometry_msgs::TransformStamped to_left = geometry_msgs::TransformStamped();
+        to_left.transform.rotation.x = m_rotx;
+        to_left.transform.rotation.y = m_roty;
+        to_left.transform.rotation.z = m_rotz;
+        to_left.transform.rotation.w = m_rotw;
+        to_left.transform.translation.x = m_tranx;
+        to_left.transform.translation.y = m_trany;
+        to_left.transform.translation.z = m_tranz;
+        to_left.header.stamp = ros::Time::now();
+        to_left.header.frame_id = "uav1/basler_stereopair/base";
+        to_left.child_frame_id = "uav1/basler_left_optical";
+
+        auto to_left_mrs = mrs_lib::TransformStamped{to_left.header.frame_id,
+                                                     to_left.child_frame_id,
+                                                     ros::Time::now(),
+                                                     to_left};
+        //
+        auto T2p_cam2tag = m_transformer.getTransform("uav1/basler_left_optical", "basler_left_optical/tag_1");
+        auto T2T1_base2tag = m_transformer.getTransform("uav1/basler_stereopair/base", "basler_right_optical/tag_1");
+
+        Eigen::Affine3d corrected;
+
+        if (T2p_cam2tag.has_value() and T2T1_base2tag.has_value()) {
+            m_mut_transform_tags.lock();
+            corrected = T2p_cam2tag.value().inverse().getTransformEigen() *
+                        m_transform_msg.getTransformEigen() *
+                        T2T1_base2tag.value().getRotationEigen();
+            m_mut_transform_tags.unlock();
+
+            to_left_mrs = mrs_lib::TransformStamped{to_left.header.frame_id,
+                                                    to_left.child_frame_id,
+                                                    to_left.header.stamp,
+                                                    tf2::eigenToTransform(corrected)};
+
+            to_left = to_left_mrs.getTransform();
+            to_left.header.frame_id = "uav1/basler_stereopair/base";
+            to_left.child_frame_id = "uav1/basler_left_optical";
+            to_left.header.stamp = ros::Time::now();
+
+        } else {
+            ROS_ERROR_THROTTLE(1.0, "[basler stereo pair tag correction] wrong transformation");
         }
-
-
-        ROS_WARN("[basler_driver] error, publishing to_left");
-//        }
-        ROS_INFO("[basler_driver] transform stamped sent from %s to %s time %u", to_left.header.frame_id.c_str(),
-                 to_left.child_frame_id.c_str(), to_left.header.stamp.nsec);
+        m_tbroadcaster.sendTransform(to_left);
+        ROS_INFO("[basler_driver] transform stamped sent from %s to %s time %u",
+                 to_left.header.frame_id.c_str(),
+                 to_left.child_frame_id.c_str(),
+                 to_left.header.stamp.nsec);
     }
 // | -------------------- other functions ------------------- |
 
