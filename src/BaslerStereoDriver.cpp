@@ -67,7 +67,7 @@ namespace basler_stereo_driver {
 
         geometry_msgs::TransformStamped transform_msg = tf2::eigenToTransform(initial_aff_transform);
 
-        m_transform_msg = mrs_lib::TransformStamped("basler_right_optical/tag_1",
+        m_RL_correction = mrs_lib::TransformStamped("basler_right_optical/tag_1",
                                                     "basler_left_optical/tag_1",
                                                     ros::Time::now(),
                                                     transform_msg);
@@ -96,6 +96,7 @@ namespace basler_stereo_driver {
             return;
         }
         std::lock_guard<std::mutex> lt{m_mut_rtpose};
+        m_right_tag_poses.clear();
         std::for_each(right_detections.begin(),
                       right_detections.end(),
                       [&](const auto &el) { m_right_tag_poses.push_back(el.pose.pose.pose.position); });
@@ -121,6 +122,7 @@ namespace basler_stereo_driver {
             return;
         }
         std::lock_guard<std::mutex> lt{m_mut_ltpose};
+        m_left_tag_poses.clear();
         std::for_each(left_detections.begin(),
                       left_detections.end(),
                       [&](const auto &el) { m_left_tag_poses.push_back(el.pose.pose.pose.position); });
@@ -136,9 +138,11 @@ namespace basler_stereo_driver {
 
         if (not m_is_initialized) return;
         if (m_right_tag_poses.empty() or m_left_tag_poses.empty()) return;
+
         {
-            std::lock_guard<std::mutex> lg{m_mut_rtpose};
-            std::lock_guard<std::mutex> lg2{m_mut_ltpose};
+            std::scoped_lock lck{m_mut_rtpose, m_mut_ltpose};
+//            std::lock_guard<std::mutex> lg{m_mut_rtpose};
+//            std::lock_guard<std::mutex> lg2{m_mut_ltpose};
 
 //            if (std::abs(m_timestamp_frt.toSec() - m_timestamp_flt.toSec()) > ros::Duration(0.01).toSec()) {
 //                ROS_WARN_THROTTLE(1.0,
@@ -156,27 +160,27 @@ namespace basler_stereo_driver {
         auto dst = mat_t{};
         Eigen::Vector3d row_eigen;
         {
-            std::lock_guard<std::mutex> lg_r{m_mut_rtpose};
+            std::lock_guard lock{m_mut_rtpose};
             for (int i = 0; i < m; ++i) {
                 tf2::fromMsg(m_right_tag_poses[i], row_eigen);
                 src.block(0, i, d, 1) = row_eigen;
             }
         }
         {
-            std::lock_guard<std::mutex> lg_l{m_mut_ltpose};
+            std::lock_guard lock{m_mut_ltpose};
             for (int i = 0; i < m; ++i) {
                 tf2::fromMsg(m_left_tag_poses[i], row_eigen);
                 dst.block(0, i, d, 1) = row_eigen;
             }
         }
         // No way to directly cast umeyama output to Eigen::Affine3d
-        Eigen::Matrix4d translation = umeyama(src, dst);
-        Eigen::Affine3d translation_aff;
-        translation_aff = translation;
-        // And here affine transformation is needed
-        std::lock_guard<std::mutex> ltr{m_mut_transform_tags};
-        geometry_msgs::TransformStamped transform_msg = tf2::eigenToTransform(translation_aff);
-        m_transform_msg = mrs_lib::TransformStamped("basler_right_optical/tag_1",
+        Eigen::Matrix4d transform = umeyama(src, dst);
+        Eigen::Affine3d transform_aff;
+        transform_aff = transform;
+        // And here affine transform is needed
+        std::lock_guard lock{m_mut_RL_correction};
+        geometry_msgs::TransformStamped transform_msg = tf2::eigenToTransform(transform_aff);
+        m_RL_correction = mrs_lib::TransformStamped("basler_right_optical/tag_1",
                                                     "basler_left_optical/tag_1",
                                                     ros::Time::now(),
                                                     transform_msg);
@@ -184,7 +188,7 @@ namespace basler_stereo_driver {
 
     void BaslerStereoDriver::m_tim_cbk_transformation([[maybe_unused]] const ros::TimerEvent &ev) {
         // timer callback to publish camera position firstly as uncorrected estimation of a position (from CAD)
-        // and then - corrected using least-squares solution for two sets of points
+        // and then - T_RL_corrected using least-squares solution for two sets of points
 
         if (not m_is_initialized) return;
 
@@ -205,22 +209,22 @@ namespace basler_stereo_driver {
                                                      ros::Time::now(),
                                                      to_left};
         //
-        auto T2p_cam2tag = m_transformer.getTransform("uav1/basler_left_optical", "basler_left_optical/tag_1");
-        auto T2T1_base2tag = m_transformer.getTransform("uav1/basler_stereopair/base", "basler_right_optical/tag_1");
+        auto T_RL = m_transformer.getTransform("uav1/basler_left_optical", "uav1/basler_right_optical");
+        auto T_BR = m_transformer.getTransform("uav1/basler_stereopair/base", "uav1/basler_right_optical");
+        // transformation rightC to leftC -> left mult on correction -> calculate base ->
+        Eigen::Affine3d T_RL_corrected, T_BL_corrected;
 
-        Eigen::Affine3d corrected;
-
-        if (T2p_cam2tag.has_value() and T2T1_base2tag.has_value()) {
-            m_mut_transform_tags.lock();
-            corrected = T2p_cam2tag.value().inverse().getTransformEigen() *
-                        m_transform_msg.getTransformEigen() *
-                        T2T1_base2tag.value().getRotationEigen();
-            m_mut_transform_tags.unlock();
+        if (T_RL.has_value() and T_BR.has_value()) {
+            {
+                std::lock_guard lock{m_mut_RL_correction};
+                T_RL_corrected = m_RL_correction.getTransformEigen() * T_RL->getTransformEigen();
+                T_BL_corrected = T_BR->getTransformEigen() * T_RL_corrected;
+            }
 
             to_left_mrs = mrs_lib::TransformStamped{to_left.header.frame_id,
                                                     to_left.child_frame_id,
                                                     to_left.header.stamp,
-                                                    tf2::eigenToTransform(corrected)};
+                                                    tf2::eigenToTransform(T_BL_corrected)};
 
             to_left = to_left_mrs.getTransform();
             to_left.header.frame_id = "uav1/basler_stereopair/base";
