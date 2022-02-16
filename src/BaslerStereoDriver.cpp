@@ -87,23 +87,30 @@ namespace basler_stereo_driver {
             ROS_WARN_THROTTLE(2.0, "[basler_stereo_driver]: no tags visible by right camera");
             return;
         }
-//        auto msg2base = m_transformer.transformSingle("uav1/basler_stereopair/base", msg);
-//        if (not msg2base.has_value()) return;
-//        auto right_detections = msg2base.value()->detections;
-//        std::sort(right_detections.begin(), right_detections.end() - 1, [](auto a, auto b) { return a.id < b.id; });
-//        right_detections.pop_back();
-//        if (right_detections.size() != 12) {
-//            ROS_WARN_THROTTLE(1.0, "[basler stereo pair]: right camera: %zu out of 12 tags detected",
-//                              right_detections.size());
-//            return;
-//        }
-//        std::lock_guard<std::mutex> lt{m_mut_rtpose};
-//        m_right_tag_poses.clear();
-//        std::for_each(right_detections.begin(),
-//                      right_detections.end(),
-//                      [&](const auto &el) { m_right_tag_poses.push_back(el.pose.pose.pose.position); });
-//        m_timestamp_frt = msg->header.stamp;
-//        ROS_INFO_THROTTLE(2.0, "[basler_stereo_driver]: right camera tags detection cbk complete");
+        auto msg_sorted = msg.get()->detections;
+        std::sort(msg_sorted.begin(), msg_sorted.end() - 1, [](auto a, auto b) { return a.id < b.id; });
+        msg_sorted.pop_back();
+        if (msg_sorted.size() != 12) {
+            ROS_WARN_THROTTLE(1.0, "[basler stereo pair]: right camera: %zu out of 12 tags detected",
+                              msg_sorted.size());
+            return;
+        }
+        std::vector<geometry_msgs::PoseWithCovarianceStamped> poses_base_frame;
+        for (const apriltag_ros::AprilTagDetection &el: msg_sorted) {
+            auto pose_cam_frame = m_transformer.transformSingle("uav1/basler_stereopair/base", el.pose);
+            if (pose_cam_frame.has_value()) {
+                poses_base_frame.push_back(pose_cam_frame.value());
+            } else {
+                ROS_WARN_THROTTLE(2.0, "error transforming tag from camera to base frame");
+            }
+        }
+        std::lock_guard<std::mutex> lt{m_mut_ltpose};
+        m_left_tag_poses.clear();
+        std::for_each(poses_base_frame.begin(),
+                      poses_base_frame.end(),
+                      [&](const auto &el) { m_left_tag_poses.push_back(el.pose.pose.position); });
+        m_timestamp_flt = msg->header.stamp;
+        ROS_INFO_THROTTLE(2.0, "[basler_stereo_driver]: right camera tags detection cbk complete");
     }
 
 
