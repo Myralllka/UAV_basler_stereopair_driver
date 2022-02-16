@@ -73,7 +73,7 @@ namespace basler_stereo_driver {
         std::mutex m_mut_RL_correction;
         /* other parameters */
 
-        /* estimated camera2 pose */
+        /* estimated camera2 pose in base frame */
         std::atomic<float> m_rotx = -0.653;
         std::atomic<float> m_roty = 0.271;
         std::atomic<float> m_rotz = -0.271;
@@ -91,21 +91,20 @@ namespace basler_stereo_driver {
         ros::Subscriber m_sub_cfright;
         // | --------------------- timer callbacks -------------------- |
         ros::Timer m_tim_transformation;
-
         ros::Timer m_tim_tags_coordinates;
 
-        [[maybe_unused]] void m_tim_cbk_transformation([[maybe_unused]] const ros::TimerEvent &ev);
+        void m_tim_cbk_transformation(const ros::TimerEvent &ev);
 
-        [[maybe_unused]] void m_tim_cbk_tagcoor([[maybe_unused]] const ros::TimerEvent &ev);
+        void m_tim_cbk_tagcoor(const ros::TimerEvent &ev);
 
         // | ----------------------- publishers ----------------------- |
 
         // | ----------------------- subscribers ---------------------- |
 
         // | --------------------- other functions -------------------- |
-        void m_cbk_fright_tag_detection([[maybe_unused]] const apriltag_ros::AprilTagDetectionArray msg);
+        void m_cbk_fright_tag_detection(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg);
 
-        void m_cbk_fleft_tag_detection([[maybe_unused]] const apriltag_ros::AprilTagDetectionArray msg);
+        void m_cbk_fleft_tag_detection(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg);
 
     };
 //}
