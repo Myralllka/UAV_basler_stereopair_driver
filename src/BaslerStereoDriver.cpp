@@ -33,6 +33,20 @@ namespace basler_stereo_driver {
         }
         // | ---------------- some data post-processing --------------- |
 
+
+        m_T_BL_geometry_msg_static = geometry_msgs::TransformStamped();
+
+        m_T_BL_geometry_msg_static.transform.rotation.x = m_rotx;
+        m_T_BL_geometry_msg_static.transform.rotation.y = m_roty;
+        m_T_BL_geometry_msg_static.transform.rotation.z = m_rotz;
+        m_T_BL_geometry_msg_static.transform.rotation.w = m_rotw;
+        m_T_BL_geometry_msg_static.transform.translation.x = m_tranx;
+        m_T_BL_geometry_msg_static.transform.translation.y = m_trany;
+        m_T_BL_geometry_msg_static.transform.translation.z = m_tranz;
+        m_T_BL_geometry_msg_static.header.stamp = ros::Time::now();
+        m_T_BL_geometry_msg_static.header.frame_id = "uav1/basler_stereopair/base";
+        m_T_BL_geometry_msg_static.child_frame_id = "uav1/basler_left_optical";
+
         // | ----------------- publishers initialize ------------------ |
 
         // | ---------------- subscribers initialize ------------------ |
@@ -105,11 +119,11 @@ namespace basler_stereo_driver {
             }
         }
         std::lock_guard<std::mutex> lt{m_mut_ltpose};
-        m_left_tag_poses.clear();
+        m_right_tag_poses.clear();
         std::for_each(poses_base_frame.begin(),
                       poses_base_frame.end(),
-                      [&](const auto &el) { m_left_tag_poses.push_back(el.pose.pose.position); });
-        m_timestamp_flt = msg->header.stamp;
+                      [&](const auto &el) { m_right_tag_poses.push_back(el.pose.pose.position); });
+        m_timestamp_frt = msg->header.stamp;
         ROS_INFO_THROTTLE(2.0, "[basler_stereo_driver]: right camera tags detection cbk complete");
     }
 
@@ -154,12 +168,10 @@ namespace basler_stereo_driver {
         // save them as a mrs_lib::TransformStamped
 
         if (not m_is_initialized) return;
-        if (m_right_tag_poses.empty() or m_left_tag_poses.empty()) return;
 
-//        {
-//            std::scoped_lock lck{m_mut_rtpose, m_mut_ltpose};
-//            std::lock_guard<std::mutex> lg{m_mut_rtpose};
-//            std::lock_guard<std::mutex> lg2{m_mut_ltpose};
+        {
+            std::scoped_lock lck{m_mut_rtpose, m_mut_ltpose};
+            if (m_right_tag_poses.empty() or m_left_tag_poses.empty()) return;
 
 //            if (std::abs(m_timestamp_frt.toSec() - m_timestamp_flt.toSec()) > ros::Duration(0.01).toSec()) {
 //                ROS_WARN_THROTTLE(1.0,
@@ -167,7 +179,7 @@ namespace basler_stereo_driver {
 //                                  std::abs(m_timestamp_frt.toSec() - m_timestamp_flt.toSec()));
 //                return;
 //            }
-//        }
+        }
         const auto d = 3;
         const auto m = 12;
 
@@ -180,19 +192,19 @@ namespace basler_stereo_driver {
             std::lock_guard lock{m_mut_rtpose};
             for (int i = 0; i < m; ++i) {
                 tf2::fromMsg(m_right_tag_poses[i], row_eigen);
-                src.block(0, i, d, 1) = row_eigen;
+                src.col(i) = row_eigen;
             }
         }
         {
             std::lock_guard lock{m_mut_ltpose};
             for (int i = 0; i < m; ++i) {
                 tf2::fromMsg(m_left_tag_poses[i], row_eigen);
-                dst.block(0, i, d, 1) = row_eigen;
+                dst.col(i) = row_eigen;
             }
         }
         // No way to directly cast umeyama output to Eigen::Affine3d
         Eigen::Matrix4d transform = umeyama(src, dst);
-//        transform.block(0, 0, 3, 3) = Eigen::Matrix<double, 3, 3>::Identity();
+        transform.block(0, 0, 3, 3) = Eigen::Matrix<double, 3, 3>::Identity();
         Eigen::Affine3d transform_aff;
         transform_aff = transform;
         // And here affine transform is needed
@@ -201,11 +213,10 @@ namespace basler_stereo_driver {
                   << Eigen::AngleAxisd(transform_aff.rotation()).angle()
                   << "\ntranslation:" << transform_aff.translation().transpose()
                   << "\n**************************************\n";
-        geometry_msgs::TransformStamped transform_msg = tf2::eigenToTransform(transform_aff);
         m_RL_correction = mrs_lib::TransformStamped("basler_right_optical/tag_1",
                                                     "basler_left_optical/tag_1",
                                                     ros::Time::now(),
-                                                    transform_msg);
+                                                    tf2::eigenToTransform(transform_aff));
     }
 
     void BaslerStereoDriver::m_tim_cbk_transformation([[maybe_unused]] const ros::TimerEvent &ev) {
@@ -214,54 +225,34 @@ namespace basler_stereo_driver {
 
         if (not m_is_initialized) return;
 
-        geometry_msgs::TransformStamped T_BL_geometry_msg = geometry_msgs::TransformStamped();
-        T_BL_geometry_msg.transform.rotation.x = m_rotx;
-        T_BL_geometry_msg.transform.rotation.y = m_roty;
-        T_BL_geometry_msg.transform.rotation.z = m_rotz;
-        T_BL_geometry_msg.transform.rotation.w = m_rotw;
-        T_BL_geometry_msg.transform.translation.x = m_tranx;
-        T_BL_geometry_msg.transform.translation.y = m_trany;
-        T_BL_geometry_msg.transform.translation.z = m_tranz;
-        T_BL_geometry_msg.header.stamp = ros::Time::now();
-        T_BL_geometry_msg.header.frame_id = "uav1/basler_stereopair/base";
-        T_BL_geometry_msg.child_frame_id = "uav1/basler_left_optical";
+        ROS_INFO("[basler_driver] transform RL publisher");
 
-        auto T_BL = mrs_lib::TransformStamped{T_BL_geometry_msg.header.frame_id,
-                                              T_BL_geometry_msg.child_frame_id,
-                                              ros::Time::now(),
-                                              T_BL_geometry_msg};
-        //
-
-        auto T_BR = m_transformer.getTransform("uav1/basler_stereopair/base", "uav1/basler_right_optical");
-        // transformation rightC to leftC -> left mult on correction -> calculate base ->
+        auto T_BR = m_transformer.getTransform("uav1/basler_stereopair/base",
+                                               "uav1/basler_right_optical");
+        auto T_RB = m_transformer.getTransform("uav1/basler_right_optical",
+                                               "uav1/basler_stereopair/base");
+        auto T_BL_copy = m_T_BL_geometry_msg_static;
         Eigen::Affine3d T_RL_corrected, T_BL_corrected, T_RL;
-
         if (T_BR.has_value()) {
-            T_RL = T_BR->getTransformEigen().inverse() * T_BL.getTransformEigen();
+            T_RL = T_BR->inverse().getTransformEigen() * Eigen::Affine3d(tf2::transformToEigen(m_T_BL_geometry_msg_static));
             {
                 std::lock_guard lock{m_mut_RL_correction};
-                T_RL_corrected = m_RL_correction.getTransformEigen() * T_RL;
+                T_RL_corrected = m_RL_correction.inverse().getTransformEigen() * T_RL;
+//                T_RL_corrected = T_RL;
                 T_BL_corrected = T_BR->getTransformEigen() * T_RL_corrected;
             }
-
-            T_BL = mrs_lib::TransformStamped{T_BL_geometry_msg.header.frame_id,
-                                             T_BL_geometry_msg.child_frame_id,
-                                             T_BL_geometry_msg.header.stamp,
-                                             tf2::eigenToTransform(T_BL_corrected)};
-
-            T_BL_geometry_msg = T_BL.getTransform();
-            T_BL_geometry_msg.header.frame_id = "uav1/basler_stereopair/base";
-            T_BL_geometry_msg.child_frame_id = "uav1/basler_left_optical";
-            T_BL_geometry_msg.header.stamp = ros::Time::now();
-
+            T_BL_copy = tf2::eigenToTransform(T_BL_corrected);
+            T_BL_copy.header.frame_id = "uav1/basler_stereopair/base";
+            T_BL_copy.child_frame_id = "uav1/basler_left_optical";
         } else {
             ROS_ERROR_THROTTLE(1.0, "[basler stereo pair tag correction] wrong transformation");
         }
-        m_tbroadcaster.sendTransform(T_BL_geometry_msg);
+        T_BL_copy.header.stamp = ros::Time::now();
+        m_tbroadcaster.sendTransform(T_BL_copy);
         ROS_INFO("[basler_driver] transform stamped sent from %s to %s time %u",
-                 T_BL_geometry_msg.header.frame_id.c_str(),
-                 T_BL_geometry_msg.child_frame_id.c_str(),
-                 T_BL_geometry_msg.header.stamp.nsec);
+                 T_BL_copy.header.frame_id.c_str(),
+                 T_BL_copy.child_frame_id.c_str(),
+                 T_BL_copy.header.stamp.nsec);
     }
 // | -------------------- other functions ------------------- |
 

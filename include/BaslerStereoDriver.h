@@ -55,7 +55,7 @@ namespace basler_stereo_driver {
         std::string m_fleft_topic_name;
         std::string m_fright_topic_name;
         float m_time_transformation{1};
-        float m_time_tagcoor{0.0001};
+        float m_time_tagcoor{1};
 
         mrs_lib::TransformBroadcaster m_tbroadcaster;
 
@@ -71,6 +71,7 @@ namespace basler_stereo_driver {
 
         mrs_lib::TransformStamped m_RL_correction;
         std::mutex m_mut_RL_correction;
+        geometry_msgs::TransformStamped m_T_BL_geometry_msg_static;
         /* other parameters */
 
         /* estimated camera2 pose in base frame */
@@ -78,6 +79,7 @@ namespace basler_stereo_driver {
         std::atomic<float> m_roty = 0.271;
         std::atomic<float> m_rotz = -0.271;
         std::atomic<float> m_rotw = 0.653;
+
         std::atomic<float> m_tranx = 0.073;
         std::atomic<float> m_trany = 0.073;
         std::atomic<float> m_tranz = 0;
