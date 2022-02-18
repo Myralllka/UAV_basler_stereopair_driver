@@ -69,9 +69,9 @@ namespace basler_stereo_driver {
         ros::Time m_timestamp_frt{0};
         std::mutex m_mut_rtpose;
 
-        mrs_lib::TransformStamped m_RL_correction;
+        mrs_lib::TransformStamped m_RL_error;
         std::mutex m_mut_RL_correction;
-        geometry_msgs::TransformStamped m_T_BL_geometry_msg_static;
+        geometry_msgs::TransformStamped m_T_BL_static;
         /* other parameters */
 
         /* estimated camera2 pose in base frame */
