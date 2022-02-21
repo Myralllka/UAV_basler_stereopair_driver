@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <mutex>
 #include <cmath>
+#include <optional>
 
 /* custom helper functions from our library */
 #include <mrs_lib/param_loader.h>
@@ -44,7 +45,7 @@ namespace basler_stereo_driver {
 
     public:
         /* onInit() is called when nodelet is launched (similar to main() in regular node) */
-        virtual void onInit();
+        void onInit() override;
 
     private:
         /* flags */
@@ -71,26 +72,16 @@ namespace basler_stereo_driver {
 
         mrs_lib::TransformStamped m_RL_error;
         std::mutex m_mut_RL_correction;
-        geometry_msgs::TransformStamped m_T_BL_static;
         /* other parameters */
-
-        /* estimated camera2 pose in base frame */
-        std::atomic<float> m_rotx = -0.653;
-        std::atomic<float> m_roty = 0.271;
-        std::atomic<float> m_rotz = -0.271;
-        std::atomic<float> m_rotw = 0.653;
-
-        std::atomic<float> m_tranx = 0.073;
-        std::atomic<float> m_trany = 0.073;
-        std::atomic<float> m_tranz = 0;
 
         // | --------------------- MRS transformer -------------------- |
 
         mrs_lib::Transformer m_transformer;
 
         // | ---------------------- msg callbacks --------------------- |
-        ros::Subscriber m_sub_cfleft;
-        ros::Subscriber m_sub_cfright;
+        void m_cbk_fright_tag_detection(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg);
+        void m_cbk_fleft_tag_detection(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg);
+
         // | --------------------- timer callbacks -------------------- |
         ros::Timer m_tim_transformation;
         ros::Timer m_tim_tags_coordinates;
@@ -102,12 +93,13 @@ namespace basler_stereo_driver {
         // | ----------------------- publishers ----------------------- |
 
         // | ----------------------- subscribers ---------------------- |
+        ros::Subscriber m_sub_cfleft;
+        ros::Subscriber m_sub_cfright;
 
         // | --------------------- other functions -------------------- |
-        void m_cbk_fright_tag_detection(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg);
-
-        void m_cbk_fleft_tag_detection(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg);
-
+        std::optional<std::vector<geometry_msgs::Point>>
+        m_tag_detection_cbk_body(const std::string &camera_name,
+                                 const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg);
     };
 //}
 
