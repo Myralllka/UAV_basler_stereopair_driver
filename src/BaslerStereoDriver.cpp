@@ -49,15 +49,15 @@ namespace basler_stereo_driver {
         // | ----------------- publishers initialize ------------------ |
 
         // | ---------------- subscribers initialize ------------------ |
-        m_sub_cfleft = nh.subscribe("/uav1/fleft/tag_detections",
-                                    1,
-                                    &BaslerStereoDriver::m_cbk_fleft_tag_detection,
-                                    this);
+        m_sub_camera_fleft = nh.subscribe("/uav1/fleft/tag_detections",
+                                          1,
+                                          &BaslerStereoDriver::m_cbk_tag_detection_fleft,
+                                          this);
 
-        m_sub_cfright = nh.subscribe("/uav1/fright/tag_detections",
-                                     1,
-                                     &BaslerStereoDriver::m_cbk_fright_tag_detection,
-                                     this);
+        m_sub_camera_fright = nh.subscribe("/uav1/fright/tag_detections",
+                                           1,
+                                           &BaslerStereoDriver::m_cbk_tag_detection_fright,
+                                           this);
 
         // | --------------------- tf transformer --------------------- |
         m_transformer = mrs_lib::Transformer("basler_stereo_driver",
@@ -71,9 +71,9 @@ namespace basler_stereo_driver {
                                                 &BaslerStereoDriver::m_tim_cbk_tagcoor,
                                                 this);
 
-        m_tim_transformation = nh.createTimer(ros::Duration(m_time_transformation),
-                                              &BaslerStereoDriver::m_tim_cbk_transformation,
-                                              this);
+        m_tim_find_BL = nh.createTimer(ros::Duration(m_time_transformation),
+                                       &BaslerStereoDriver::m_tim_cbk_find_BL,
+                                       this);
 
         // initialize the corrected transformation
         Eigen::Affine3d initial_aff_transform = Eigen::Affine3d::Identity();
@@ -93,12 +93,12 @@ namespace basler_stereo_driver {
 
 
 // | ---------------------- msg callbacks --------------------- |
-    void BaslerStereoDriver::m_cbk_fright_tag_detection(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg) {
-        std::lock_guard<std::mutex> lt{m_mut_rtpose};
+    void BaslerStereoDriver::m_cbk_tag_detection_fright(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg) {
+        std::lock_guard<std::mutex> lt{m_mut_pose_fright};
         auto res = m_tag_detection_cbk_body("right", msg);
         if (res.has_value()) {
             m_right_tag_poses = res.value();
-            m_timestamp_frt = msg->header.stamp;
+            m_timestamp_fright = msg->header.stamp;
             ROS_INFO_THROTTLE(2.0, "[basler_stereo_driver]: right camera tags detection cbk complete");
         } else {
             ROS_WARN_THROTTLE(2.0, "[basler_stereo_driver]: right camera cnk not completed");
@@ -106,12 +106,12 @@ namespace basler_stereo_driver {
     }
 
 
-    void BaslerStereoDriver::m_cbk_fleft_tag_detection(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg) {
-        std::lock_guard<std::mutex> lt{m_mut_ltpose};
+    void BaslerStereoDriver::m_cbk_tag_detection_fleft(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg) {
+        std::lock_guard<std::mutex> lt{m_mut_pose_fleft};
         auto res = m_tag_detection_cbk_body("left", msg);
         if (res.has_value()) {
             m_left_tag_poses = res.value();
-            m_timestamp_flt = msg->header.stamp;
+            m_timestamp_fleft = msg->header.stamp;
             ROS_INFO_THROTTLE(2.0, "[basler_stereo_driver]: left camera tags detection cbk complete");
         } else {
             ROS_WARN_THROTTLE(2.0, "[basler_stereo_driver]: left camera cnk not completed");
@@ -125,12 +125,12 @@ namespace basler_stereo_driver {
         // save them as a mrs_lib::TransformStamped
         if (not m_is_initialized) return;
         {
-            std::scoped_lock lck{m_mut_rtpose, m_mut_ltpose};
+            std::scoped_lock lck{m_mut_pose_fright, m_mut_pose_fleft};
             if (m_right_tag_poses.empty() or m_left_tag_poses.empty()) return;
-//            if (std::abs(m_timestamp_frt.toSec() - m_timestamp_flt.toSec()) > ros::Duration(0.01).toSec()) {
+//            if (std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()) > ros::Duration(0.01).toSec()) {
 //                ROS_WARN_THROTTLE(1.0,
 //                                  "[basler stereo driver]: tags coordinates timestamps are too far away from each other: %f",
-//                                  std::abs(m_timestamp_frt.toSec() - m_timestamp_flt.toSec()));
+//                                  std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()));
 //                return;
 //            }
         }
@@ -141,14 +141,14 @@ namespace basler_stereo_driver {
         auto dst = mat_t{};
         Eigen::Vector3d row_eigen;
         {
-            std::lock_guard lock{m_mut_rtpose};
+            std::lock_guard lock{m_mut_pose_fright};
             for (int i = 0; i < m; ++i) {
                 tf2::fromMsg(m_right_tag_poses[i], row_eigen);
                 src.col(i) = row_eigen;
             }
         }
         {
-            std::lock_guard lock{m_mut_ltpose};
+            std::lock_guard lock{m_mut_pose_fleft};
             for (int i = 0; i < m; ++i) {
                 tf2::fromMsg(m_left_tag_poses[i], row_eigen);
                 dst.col(i) = row_eigen;
@@ -167,7 +167,7 @@ namespace basler_stereo_driver {
                                                tf2::eigenToTransform(transform));
     }
 
-    void BaslerStereoDriver::m_tim_cbk_transformation([[maybe_unused]] const ros::TimerEvent &ev) {
+    void BaslerStereoDriver::m_tim_cbk_find_BL([[maybe_unused]] const ros::TimerEvent &ev) {
         // timer callback to publish camera position firstly as uncorrected estimation of a position (from CAD)
         // and then - T_RL_corrected using least-squares solution for two sets of points
         // T - transformation
@@ -183,7 +183,7 @@ namespace basler_stereo_driver {
                                                "uav1/basler_right_optical");
         auto T_BL_original = m_transformer.getTransform("uav1/basler_stereopair/base",
                                                         "uav1/basler_left_optical");
-        geometry_msgs::TransformStamped T_BL_computed{};
+        geometry_msgs::TransformStamped T_BL_result{};
 
         if (T_BR.has_value() and T_BL_original.has_value()) {
             std::lock_guard lock{m_mut_RL_correction};
@@ -191,18 +191,18 @@ namespace basler_stereo_driver {
             const auto T_RL_corrected = m_RL_error.getTransformEigen().inverse() * T_RL;
             const auto T_BL_corrected = T_RL_corrected * T_BR->getTransformEigen();
             // make a new frame - pose estimation
-            T_BL_computed = tf2::eigenToTransform(T_BL_corrected);
-            T_BL_computed.header.frame_id = "uav1/basler_stereopair/base";
-            T_BL_computed.child_frame_id = "uav1/basler_left_optical_corrected";
+            T_BL_result = tf2::eigenToTransform(T_BL_corrected);
+            T_BL_result.header.frame_id = "uav1/basler_stereopair/base";
+            T_BL_result.child_frame_id = "uav1/basler_left_optical_corrected";
         } else {
             ROS_ERROR_THROTTLE(2.0, "[basler stereo driver] wrong transformation from L/R to base");
         }
-        T_BL_computed.header.stamp = ev.current_real;
-        m_tbroadcaster.sendTransform(T_BL_computed);
+        T_BL_result.header.stamp = ev.current_real;
+        m_tbroadcaster.sendTransform(T_BL_result);
         ROS_INFO_THROTTLE(2.0, "[basler_driver] transform stamped sent from %s to %s time %u",
-                          T_BL_computed.header.frame_id.c_str(),
-                          T_BL_computed.child_frame_id.c_str(),
-                          T_BL_computed.header.stamp.nsec);
+                          T_BL_result.header.frame_id.c_str(),
+                          T_BL_result.child_frame_id.c_str(),
+                          T_BL_result.header.stamp.nsec);
     }
 // | -------------------- other functions ------------------- |
 

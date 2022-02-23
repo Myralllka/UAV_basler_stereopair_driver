@@ -53,8 +53,6 @@ namespace basler_stereo_driver {
 
         /* ros parameters */
         std::string m_uav_name;
-        std::string m_fleft_topic_name;
-        std::string m_fright_topic_name;
         float m_time_transformation{1};
         float m_time_tagcoor{1};
 
@@ -63,15 +61,20 @@ namespace basler_stereo_driver {
         /* tag detection callback data */
 
         std::vector<geometry_msgs::Point> m_left_tag_poses;
-        ros::Time m_timestamp_flt{0};
-        std::mutex m_mut_ltpose;
+        ros::Time m_timestamp_fleft{0};
+        std::mutex m_mut_pose_fleft;
 
         std::vector<geometry_msgs::Point> m_right_tag_poses;
-        ros::Time m_timestamp_frt{0};
-        std::mutex m_mut_rtpose;
+        ros::Time m_timestamp_fright{0};
+        std::mutex m_mut_pose_fright;
 
         mrs_lib::TransformStamped m_RL_error;
         std::mutex m_mut_RL_correction;
+
+        /* pose filter data */
+        size_t m_weight{0};
+//        geometry_msgs::
+
         /* other parameters */
 
         // | --------------------- MRS transformer -------------------- |
@@ -79,22 +82,22 @@ namespace basler_stereo_driver {
         mrs_lib::Transformer m_transformer;
 
         // | ---------------------- msg callbacks --------------------- |
-        void m_cbk_fright_tag_detection(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg);
-        void m_cbk_fleft_tag_detection(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg);
+        void m_cbk_tag_detection_fright(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg);
+
+        void m_cbk_tag_detection_fleft(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg);
 
         // | --------------------- timer callbacks -------------------- |
-        ros::Timer m_tim_transformation;
+        ros::Timer m_tim_find_BL;
         ros::Timer m_tim_tags_coordinates;
 
-        void m_tim_cbk_transformation(const ros::TimerEvent &ev);
-
+        void m_tim_cbk_find_BL(const ros::TimerEvent &ev);
         void m_tim_cbk_tagcoor(const ros::TimerEvent &ev);
 
         // | ----------------------- publishers ----------------------- |
 
         // | ----------------------- subscribers ---------------------- |
-        ros::Subscriber m_sub_cfleft;
-        ros::Subscriber m_sub_cfright;
+        ros::Subscriber m_sub_camera_fleft;
+        ros::Subscriber m_sub_camera_fright;
 
         // | --------------------- other functions -------------------- |
         std::optional<std::vector<geometry_msgs::Point>>
