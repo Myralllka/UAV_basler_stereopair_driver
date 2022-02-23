@@ -53,8 +53,8 @@ namespace basler_stereo_driver {
 
         /* ros parameters */
         std::string m_uav_name;
-        float m_time_transformation{1};
-        float m_time_tagcoor{1};
+        float m_time_transformation{0.001};
+        float m_time_tagcoor{0.001};
 
         mrs_lib::TransformBroadcaster m_tbroadcaster;
 
@@ -73,7 +73,7 @@ namespace basler_stereo_driver {
 
         /* pose filter data */
         size_t m_weight{0};
-//        geometry_msgs::
+        Eigen::Affine3d m_filtered_pose;
 
         /* other parameters */
 
@@ -91,6 +91,7 @@ namespace basler_stereo_driver {
         ros::Timer m_tim_tags_coordinates;
 
         void m_tim_cbk_find_BL(const ros::TimerEvent &ev);
+
         void m_tim_cbk_tagcoor(const ros::TimerEvent &ev);
 
         // | ----------------------- publishers ----------------------- |
@@ -103,6 +104,9 @@ namespace basler_stereo_driver {
         std::optional<std::vector<geometry_msgs::Point>>
         m_tag_detection_cbk_body(const std::string &camera_name,
                                  const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg);
+
+        Eigen::Affine3d m_interpolate_pose(const Eigen::Affine3d &input_avg,
+                                           const Eigen::Affine3d &other);
     };
 //}
 
