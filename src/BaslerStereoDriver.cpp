@@ -114,12 +114,12 @@ namespace basler_stereo_driver {
         {
             std::scoped_lock lck{m_mut_pose_fright, m_mut_pose_fleft};
             if (m_right_tag_poses.empty() or m_left_tag_poses.empty()) return;
-//            if (std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()) > ros::Duration(0.01).toSec()) {
-//                ROS_WARN_THROTTLE(1.0,
-//                                  "[basler stereo driver]: tags coordinates timestamps are too far away from each other: %f",
-//                                  std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()));
-//                return;
-//            }
+            if (std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()) > ros::Duration(0.06).toSec()) {
+                ROS_WARN_THROTTLE(1.0,
+                                  "[basler stereo driver]: tags coordinates timestamps are too far away from each other: %f",
+                                  std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()));
+                return;
+            }
         }
         const auto d = 3;
         const auto m = 12;
@@ -158,8 +158,20 @@ namespace basler_stereo_driver {
         // L - left camera optical pose
         // R - right camera optical pose
 
-        if (not m_is_initialized) return;
+        if (not m_is_initialized) {
+            return;
+        }
 
+        {
+            std::scoped_lock lck{m_mut_pose_fright, m_mut_pose_fleft};
+            if (m_right_tag_poses.empty() or m_left_tag_poses.empty()) return;
+            if (std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()) > ros::Duration(0.06).toSec()) {
+                ROS_WARN_THROTTLE(1.0,
+                                  "[basler stereo driver]: tags coordinates timestamps are too far away from each other: %f",
+                                  std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()));
+                return;
+            }
+        }
         ROS_INFO_THROTTLE(2.0, "[basler_driver] transform RL publisher");
         // TODO: check why transformer behave in this way (opposite to expected)
         auto T_BR = m_transformer.getTransform("uav1/basler_right_optical",
@@ -185,6 +197,21 @@ namespace basler_stereo_driver {
         T_BL_result.header.stamp = ev.current_real;
         T_BL_result.header.frame_id = "uav1/basler_stereopair/base";
         T_BL_result.child_frame_id = "uav1/basler_left_optical_corrected";
+
+        auto tag1 = m_transformer.transformSingle("uav1/basler_left_optical_corrected",
+                                                  m_transformer.getTransform("basler_left_optical/tag_0",
+                                                                             "uav1/basler_left_optical").value().getTransform());
+        if (tag1.has_value()) {
+            auto transform = tag1.value();
+            transform.header.stamp = ros::Time::now();
+            transform.header.frame_id = "uav1/basler_left_optical_corrected";
+            transform.child_frame_id = "uav1/tag0_modified";
+            m_tbroadcaster.sendTransform(transform);
+            ROS_INFO_THROTTLE(2.0, "[basler_driver] tag  sent from %s to %s time %u",
+                              transform.header.frame_id.c_str(),
+                              transform.child_frame_id.c_str(),
+                              transform.header.stamp.nsec);
+        }
         m_tbroadcaster.sendTransform(T_BL_result);
         ROS_INFO_THROTTLE(2.0, "[basler_driver] transform stamped sent from %s to %s time %u",
                           T_BL_result.header.frame_id.c_str(),
@@ -198,17 +225,20 @@ namespace basler_stereo_driver {
         // apply simple filter
         using quat_t = Eigen::Quaterniond;
 
-        auto result_translation = (input_avg.translation() * m_weight + other.translation()) / (m_weight + 1);
+        const int wght = 1;
+        auto result_translation =
+                (input_avg.translation() * (m_weight / wght) + other.translation()) / ((m_weight / wght) + 1);
 
-        auto result_rotation = quat_t{input_avg.rotation()}.slerp(1.0 / (static_cast<double>(m_weight) + 1),
+        auto result_rotation = quat_t{input_avg.rotation()}.slerp(1.0 / (static_cast<double>(m_weight) / wght + 1),
                                                                   quat_t{other.rotation()});
         ++m_weight;
+        std::cout << "here\n";
         auto res = Eigen::Affine3d::Identity();
         res.translate(result_translation).rotate(result_rotation);
-        std::cout << "\n**********************************************\n" << "angle:"
-                  << Eigen::AngleAxisd(res.rotation()).angle()
-                  << "\ntranslation:" << res.translation().transpose()
-                  << "\n**********************************************\n";
+//        std::cout << "\n**********************************************\n" << "angle:"
+//                  << Eigen::AngleAxisd(res.rotation()).angle()
+//                  << "\ntranslation:" << res.translation().transpose()
+//                  << "\n**********************************************\n";
         return res;
     }
 
