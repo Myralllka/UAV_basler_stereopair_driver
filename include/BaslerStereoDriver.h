@@ -13,6 +13,7 @@
 #include <mutex>
 #include <cmath>
 #include <optional>
+#include <cstring>
 
 /* custom helper functions from our library */
 #include <mrs_lib/param_loader.h>

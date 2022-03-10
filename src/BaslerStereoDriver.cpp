@@ -165,7 +165,7 @@ namespace basler_stereo_driver {
         {
             std::scoped_lock lck{m_mut_pose_fright, m_mut_pose_fleft};
             if (m_right_tag_poses.empty() or m_left_tag_poses.empty()) return;
-            if (std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()) > ros::Duration(0.06).toSec()) {
+            if (std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()) > ros::Duration(0.2).toSec()) {
                 ROS_WARN_THROTTLE(1.0,
                                   "[basler stereo driver]: tags coordinates timestamps are too far away from each other: %f",
                                   std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()));
@@ -178,39 +178,42 @@ namespace basler_stereo_driver {
                                                "uav1/basler_stereopair/base");
         auto T_BL_original = m_transformer.getTransform("uav1/basler_left_optical",
                                                         "uav1/basler_stereopair/base");
-        geometry_msgs::TransformStamped T_BL_result{};
+        geometry_msgs::TransformStamped T_BL_result;
 
-        if (T_BR.has_value() and T_BL_original.has_value() and m_weight) {
+        if (T_BR.has_value() and T_BL_original.has_value()) {
             std::lock_guard lock{m_mut_RL_correction};
             const auto T_RL = T_BL_original->getTransformEigen() * T_BR->inverse().getTransformEigen();
             const auto T_RL_corrected = m_RL_error.getTransformEigen().inverse() * T_RL;
             [[maybe_unused]] auto T_BL_corrected = T_RL_corrected * T_BR->getTransformEigen();
             // make a new frame - pose estimation
-            T_BL_result = tf2::eigenToTransform(m_interpolate_pose(m_filtered_pose, T_BL_corrected));
-        } else {
-            if (T_BL_original.has_value()) {
-                m_filtered_pose = T_BL_original->getTransformEigen();
-                ++m_weight;
+            if (not m_weight) {
+                m_filtered_pose = T_BL_corrected;
             }
+            ++m_weight;
+            T_BL_result = tf2::eigenToTransform(m_interpolate_pose(m_filtered_pose, T_BL_corrected));
+
+        } else {
             ROS_ERROR_THROTTLE(2.0, "[basler stereo driver] wrong transformation from L/R to base");
         }
         T_BL_result.header.stamp = ev.current_real;
         T_BL_result.header.frame_id = "uav1/basler_stereopair/base";
         T_BL_result.child_frame_id = "uav1/basler_left_optical_corrected";
 
-        auto tag1 = m_transformer.transformSingle("uav1/basler_left_optical_corrected",
-                                                  m_transformer.getTransform("basler_left_optical/tag_0",
-                                                                             "uav1/basler_left_optical").value().getTransform());
-        if (tag1.has_value()) {
-            auto transform = tag1.value();
-            transform.header.stamp = ros::Time::now();
-            transform.header.frame_id = "uav1/basler_left_optical_corrected";
-            transform.child_frame_id = "uav1/tag0_modified";
-            m_tbroadcaster.sendTransform(transform);
-            ROS_INFO_THROTTLE(2.0, "[basler_driver] tag  sent from %s to %s time %u",
-                              transform.header.frame_id.c_str(),
-                              transform.child_frame_id.c_str(),
-                              transform.header.stamp.nsec);
+        for (int i = 0; i < 12; ++i) {
+            auto L2tag = m_transformer.getTransform("uav1/basler_left_optical",
+                                                    "basler_left_optical/tag_" + std::to_string(i));
+
+            if (L2tag.has_value()) {
+                auto transform = L2tag.value().inverse().getTransform();
+                transform.header.stamp = ros::Time::now();
+                transform.header.frame_id = "uav1/basler_left_optical_corrected";
+                transform.child_frame_id = "uav1/tag_modified" + std::to_string(i);
+                m_tbroadcaster.sendTransform(transform);
+//                ROS_INFO_THROTTLE(2.0, "[basler_driver] tag  sent from %s to %s time %u",
+//                                  transform.header.frame_id.c_str(),
+//                                  transform.child_frame_id.c_str(),
+//                                  transform.header.stamp.nsec);
+            }
         }
         m_tbroadcaster.sendTransform(T_BL_result);
         ROS_INFO_THROTTLE(2.0, "[basler_driver] transform stamped sent from %s to %s time %u",
@@ -231,8 +234,6 @@ namespace basler_stereo_driver {
 
         auto result_rotation = quat_t{input_avg.rotation()}.slerp(1.0 / (static_cast<double>(m_weight) / wght + 1),
                                                                   quat_t{other.rotation()});
-        ++m_weight;
-        std::cout << "here\n";
         auto res = Eigen::Affine3d::Identity();
         res.translate(result_translation).rotate(result_rotation);
 //        std::cout << "\n**********************************************\n" << "angle:"

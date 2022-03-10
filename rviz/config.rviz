@@ -70,9 +70,9 @@ Visualization Manager:
         uav1/basler_left_optical/tag_1:
           Value: false
         uav1/basler_left_optical/tag_10:
-          Value: true
-        uav1/basler_left_optical/tag_11:
           Value: false
+        uav1/basler_left_optical/tag_11:
+          Value: true
         uav1/basler_left_optical/tag_2:
           Value: true
         uav1/basler_left_optical/tag_3:
@@ -88,7 +88,7 @@ Visualization Manager:
         uav1/basler_left_optical/tag_8:
           Value: false
         uav1/basler_left_optical/tag_9:
-          Value: false
+          Value: true
         uav1/basler_left_optical_corrected:
           Value: true
         uav1/basler_right_optical:
@@ -100,9 +100,9 @@ Visualization Manager:
         uav1/basler_right_optical/tag_1:
           Value: false
         uav1/basler_right_optical/tag_10:
-          Value: true
-        uav1/basler_right_optical/tag_11:
           Value: false
+        uav1/basler_right_optical/tag_11:
+          Value: true
         uav1/basler_right_optical/tag_2:
           Value: true
         uav1/basler_right_optical/tag_3:
@@ -118,8 +118,32 @@ Visualization Manager:
         uav1/basler_right_optical/tag_8:
           Value: false
         uav1/basler_right_optical/tag_9:
-          Value: false
+          Value: true
         uav1/basler_stereopair/base:
+          Value: true
+        uav1/tag_modified0:
+          Value: true
+        uav1/tag_modified1:
+          Value: false
+        uav1/tag_modified10:
+          Value: false
+        uav1/tag_modified11:
+          Value: true
+        uav1/tag_modified2:
+          Value: true
+        uav1/tag_modified3:
+          Value: false
+        uav1/tag_modified4:
+          Value: true
+        uav1/tag_modified5:
+          Value: false
+        uav1/tag_modified6:
+          Value: false
+        uav1/tag_modified7:
+          Value: false
+        uav1/tag_modified8:
+          Value: false
+        uav1/tag_modified9:
           Value: true
       Marker Alpha: 1
       Marker Scale: 0.5
@@ -157,7 +181,30 @@ Visualization Manager:
             uav1/basler_left_optical/tag_9:
               {}
           uav1/basler_left_optical_corrected:
-            {}
+            uav1/tag_modified0:
+              {}
+            uav1/tag_modified1:
+              {}
+            uav1/tag_modified10:
+              {}
+            uav1/tag_modified11:
+              {}
+            uav1/tag_modified2:
+              {}
+            uav1/tag_modified3:
+              {}
+            uav1/tag_modified4:
+              {}
+            uav1/tag_modified5:
+              {}
+            uav1/tag_modified6:
+              {}
+            uav1/tag_modified7:
+              {}
+            uav1/tag_modified8:
+              {}
+            uav1/tag_modified9:
+              {}
           uav1/basler_right_optical:
             uav1/basler_right_optical/basler_stereopair_tag_bundles:
               {}
@@ -215,7 +262,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 0.37107783555984497
+      Distance: 1.2339980602264404
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -223,17 +270,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 0.04261590912938118
-        Y: -0.014352838508784771
-        Z: -0.01514238491654396
+        X: 0.5487454533576965
+        Y: 0.0818142518401146
+        Z: 0.15592020750045776
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.7397980093955994
+      Pitch: -0.09020240604877472
       Target Frame: <Fixed Frame>
-      Yaw: 2.1780526638031006
+      Yaw: 0.22805678844451904
     Saved: ~
 Window Geometry:
   Displays:
