@@ -66,19 +66,19 @@ Visualization Manager:
         uav1/basler_left_optical/basler_stereopair_tag_bundles:
           Value: false
         uav1/basler_left_optical/tag_0:
-          Value: true
+          Value: false
         uav1/basler_left_optical/tag_1:
           Value: false
         uav1/basler_left_optical/tag_10:
           Value: false
         uav1/basler_left_optical/tag_11:
-          Value: true
+          Value: false
         uav1/basler_left_optical/tag_2:
-          Value: true
+          Value: false
         uav1/basler_left_optical/tag_3:
           Value: false
         uav1/basler_left_optical/tag_4:
-          Value: true
+          Value: false
         uav1/basler_left_optical/tag_5:
           Value: false
         uav1/basler_left_optical/tag_6:
@@ -88,9 +88,9 @@ Visualization Manager:
         uav1/basler_left_optical/tag_8:
           Value: false
         uav1/basler_left_optical/tag_9:
-          Value: true
+          Value: false
         uav1/basler_left_optical_corrected:
-          Value: true
+          Value: false
         uav1/basler_right_optical:
           Value: true
         uav1/basler_right_optical/basler_stereopair_tag_bundles:
@@ -262,7 +262,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 1.2339980602264404
+      Distance: 0.7935335040092468
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -278,9 +278,9 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: -0.09020240604877472
+      Pitch: 0.01979760080575943
       Target Frame: <Fixed Frame>
-      Yaw: 0.22805678844451904
+      Yaw: 0.6580561995506287
     Saved: ~
 Window Geometry:
   Displays:
