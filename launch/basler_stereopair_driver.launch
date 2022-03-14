@@ -46,8 +46,9 @@
       <param name="camera1_fleft_pose" type="string" value="$(arg camera1_fleft_pose)" />
       <param name="camera2_fright_pose" type="string" value="$(arg camera2_fright_pose)" />
 
+      <param name="camera_poses_filename" type="string" value="$(find basler_stereopair_driver)/config/camera_poses.yaml" />
       <!-- ROS parameters config file -->
-      <rosparam file="$(find basler_stereopair_driver)/config/cameras_roi.yaml" />
+      <rosparam file="$(find basler_stereopair_driver)/config/camera_poses.yaml" />
 
       <!-- Subscribers (note that the topic names will also be remapped using the namespace as a prefix) -->
 

@@ -14,6 +14,8 @@
 #include <cmath>
 #include <optional>
 #include <cstring>
+#include <fstream>
+#include <vector>
 
 /* custom helper functions from our library */
 #include <mrs_lib/param_loader.h>
@@ -25,6 +27,7 @@
 #include <tf2_ros/transform_broadcaster.h>
 #include <apriltag_ros/AprilTagDetectionArray.h>
 #include <sensor_msgs/image_encodings.h>
+#include <std_msgs/builtin_bool.h>
 
 /* opencv */
 #include <cv_bridge/cv_bridge.h>
@@ -51,6 +54,7 @@ namespace basler_stereo_driver {
     private:
         /* flags */
         bool m_is_initialized = false;
+
         /* ros parameters */
         std::string m_uav_name;
         float m_time_transformation{0.001};
@@ -73,10 +77,11 @@ namespace basler_stereo_driver {
 
         /* pose filter data */
         size_t m_weight{0};
+        std::mutex m_mut_filtered_pose;
         Eigen::Affine3d m_filtered_pose;
 
         /* other parameters */
-
+        std::string m_config_filename;
         // | --------------------- MRS transformer -------------------- |
 
         mrs_lib::Transformer m_transformer;
@@ -85,6 +90,8 @@ namespace basler_stereo_driver {
         void m_cbk_tag_detection_fright(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg);
 
         void m_cbk_tag_detection_fleft(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg);
+
+        void m_cbk_complete_save_calibration(std_msgs::Bool flag);
 
         // | --------------------- timer callbacks -------------------- |
         ros::Timer m_tim_find_BL;
@@ -99,6 +106,8 @@ namespace basler_stereo_driver {
         // | ----------------------- subscribers ---------------------- |
         ros::Subscriber m_sub_camera_fleft;
         ros::Subscriber m_sub_camera_fright;
+
+        ros::Subscriber m_sub_complete_calibration;
 
         // | --------------------- other functions -------------------- |
         std::optional<std::vector<geometry_msgs::Point>>

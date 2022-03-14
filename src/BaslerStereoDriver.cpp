@@ -23,7 +23,7 @@ namespace basler_stereo_driver {
         mrs_lib::ParamLoader pl(nh, "BaslerStereoDriver");
 
         pl.loadParam("UAV_NAME", m_uav_name);
-
+        pl.loadParam("camera_poses_filename", m_config_filename);
 
         if (!pl.loadedSuccessfully()) {
             ROS_ERROR("[BaslerStereoDriver]: failed to load non-optional parameters!");
@@ -45,6 +45,10 @@ namespace basler_stereo_driver {
                                            1,
                                            &BaslerStereoDriver::m_cbk_tag_detection_fright,
                                            this);
+        m_sub_complete_calibration = nh.subscribe("/uav1/complete",
+                                                  1,
+                                                  &BaslerStereoDriver::m_cbk_complete_save_calibration,
+                                                  this);
 
         // | --------------------- tf transformer --------------------- |
         m_transformer = mrs_lib::Transformer("basler_stereo_driver",
@@ -101,10 +105,23 @@ namespace basler_stereo_driver {
             m_timestamp_fleft = msg->header.stamp;
             ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver]: left camera tags detection cbk complete");
         } else {
-            ROS_WARN_THROTTLE(2.0, "[BasleSrtereoDriver]: left camera cnk not completed");
+            ROS_WARN_THROTTLE(2.0, "[BasleStereoDriver]: left camera cnk not completed");
         }
     }
 
+    void BaslerStereoDriver::m_cbk_complete_save_calibration(std_msgs::Bool flag) {
+        if (flag.data) {
+            std::lock_guard l{m_mut_filtered_pose};
+            std::ofstream fout(m_config_filename);
+            Eigen::IOFormat fmt{3, 0, ", ", ",\n", "", "", "[", "]"};
+            fout << "fleft_camera:\n";
+            fout << "\trotation: "
+                 << m_filtered_pose.rotation().format(fmt)
+                 << std::endl;
+            fout << "\ttranslation: " << m_filtered_pose.translation().format(fmt) << std::endl;
+            ros::shutdown();
+        }
+    }
 
 // | --------------------- timer callbacks -------------------- |
     void BaslerStereoDriver::m_tim_cbk_tagcoor([[maybe_unused]] const ros::TimerEvent &ev) {
@@ -186,6 +203,7 @@ namespace basler_stereo_driver {
             const auto T_RL_corrected = m_RL_error.getTransformEigen().inverse() * T_RL;
             auto T_BL_corrected = T_RL_corrected * T_BR->getTransformEigen();
             // make a new frame - pose estimation
+            std::lock_guard l{m_mut_filtered_pose};
             if (not m_weight) {
                 m_filtered_pose = T_BL_corrected;
             }
