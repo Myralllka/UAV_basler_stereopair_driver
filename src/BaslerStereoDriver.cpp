@@ -25,6 +25,11 @@ namespace basler_stereo_driver {
         pl.loadParam("UAV_NAME", m_uav_name);
         pl.loadParam("camera_poses_filename", m_config_filename);
 
+        auto fleft_rotation = pl.loadMatrixStatic2<3, 3>("fleft_camera/rotation");
+        auto fleft_translation = pl.loadMatrixStatic2<3, 1>("fleft_camera/translation");
+
+        m_fleft_pose.translate(fleft_translation).rotate(Eigen::Quaterniond{fleft_rotation});
+
         if (!pl.loadedSuccessfully()) {
             ROS_ERROR("[BaslerStereoDriver]: failed to load non-optional parameters!");
             ros::shutdown();
@@ -34,6 +39,9 @@ namespace basler_stereo_driver {
         // | ---------------- some data post-processing --------------- |
 
         // | ----------------- publishers initialize ------------------ |
+
+        m_pub_fleft_pose = nh.advertise<geometry_msgs::TransformStamped>("uav1/basler_left_optical_pose_publisher",
+                                                                         0);
 
         // | ---------------- subscribers initialize ------------------ |
         m_sub_camera_fleft = nh.subscribe("/uav1/fleft/tag_detections",
@@ -45,6 +53,7 @@ namespace basler_stereo_driver {
                                            1,
                                            &BaslerStereoDriver::m_cbk_tag_detection_fright,
                                            this);
+
         m_sub_complete_calibration = nh.subscribe("/uav1/complete",
                                                   1,
                                                   &BaslerStereoDriver::m_cbk_complete_save_calibration,
@@ -58,13 +67,17 @@ namespace basler_stereo_driver {
 
         ROS_ASSERT("[BaslerStereoDriver] timers initialisation");
 
-        m_tim_tags_coordinates = nh.createTimer(ros::Duration(m_time_tagcoor),
-                                                &BaslerStereoDriver::m_tim_cbk_tagcoor,
-                                                this);
+//        m_tim_tags_coordinates = nh.createTimer(ros::Duration(m_time_tagcoor),
+//                                                &BaslerStereoDriver::m_tim_cbk_tagcoor,
+//                                                this);
+//
+//        m_tim_find_BL = nh.createTimer(ros::Duration(m_time_transformation),
+//                                       &BaslerStereoDriver::m_tim_cbk_find_BL,
+//                                       this);
 
-        m_tim_find_BL = nh.createTimer(ros::Duration(m_time_transformation),
-                                       &BaslerStereoDriver::m_tim_cbk_find_BL,
-                                       this);
+        m_tim_fleft_pose = nh.createTimer(ros::Duration(0.0001),
+                                          &BaslerStereoDriver::m_tim_cbk_fleft_pose,
+                                          this);
 
         // initialize the corrected transformation
         Eigen::Affine3d initial_aff_transform = Eigen::Affine3d::Identity();
@@ -85,7 +98,7 @@ namespace basler_stereo_driver {
 
 // | ---------------------- msg callbacks --------------------- |
     void BaslerStereoDriver::m_cbk_tag_detection_fright(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg) {
-        std::lock_guard<std::mutex> lt{m_mut_pose_fright};
+        std::lock_guard <std::mutex> lt{m_mut_pose_fright};
         auto res = m_tag_detection_cbk_body("right", msg);
         if (res.has_value()) {
             m_right_tag_poses = res.value();
@@ -98,7 +111,7 @@ namespace basler_stereo_driver {
 
 
     void BaslerStereoDriver::m_cbk_tag_detection_fleft(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg) {
-        std::lock_guard<std::mutex> lt{m_mut_pose_fleft};
+        std::lock_guard <std::mutex> lt{m_mut_pose_fleft};
         auto res = m_tag_detection_cbk_body("left", msg);
         if (res.has_value()) {
             m_left_tag_poses = res.value();
@@ -124,6 +137,20 @@ namespace basler_stereo_driver {
     }
 
 // | --------------------- timer callbacks -------------------- |
+
+    void BaslerStereoDriver::m_tim_cbk_fleft_pose([[maybe_unused]] const ros::TimerEvent &ev) {
+        // publish left camera pose (when camera pair is already calibrated)
+        if (not m_is_initialized) return;
+
+        auto fleft_pose_stamped = tf2::eigenToTransform(m_fleft_pose);
+
+        fleft_pose_stamped.header.stamp = ros::Time::now();
+        fleft_pose_stamped.header.frame_id = "uav1/basler_stereopair/base";
+        fleft_pose_stamped.child_frame_id = "uav1/basler_left";
+
+        m_pub_fleft_pose.publish(fleft_pose_stamped);
+    }
+
     void BaslerStereoDriver::m_tim_cbk_tagcoor([[maybe_unused]] const ros::TimerEvent &ev) {
         // timer callback will find a 3d position of tags in space from two cameras and
         // save them as a mrs_lib::TransformStamped
@@ -255,7 +282,7 @@ namespace basler_stereo_driver {
         return res;
     }
 
-    std::optional<std::vector<geometry_msgs::Point>>
+    std::optional <std::vector<geometry_msgs::Point>>
     BaslerStereoDriver::m_tag_detection_cbk_body(const std::string &camera_name,
                                                  const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg) {
 
@@ -273,7 +300,7 @@ namespace basler_stereo_driver {
                               msg_sorted.size());
             return std::nullopt;
         }
-        std::vector<geometry_msgs::PoseWithCovarianceStamped> poses_base_frame;
+        std::vector <geometry_msgs::PoseWithCovarianceStamped> poses_base_frame;
         for (const apriltag_ros::AprilTagDetection &el: msg_sorted) {
             auto pose_cam_frame = m_transformer.transformSingle("uav1/basler_stereopair/base", el.pose);
             if (pose_cam_frame.has_value()) {
@@ -283,7 +310,7 @@ namespace basler_stereo_driver {
                                   camera_name.c_str());
             }
         }
-        std::vector<geometry_msgs::Point> result;
+        std::vector <geometry_msgs::Point> result;
         for (const auto &el: poses_base_frame) {
             result.push_back(el.pose.pose.position);
         }

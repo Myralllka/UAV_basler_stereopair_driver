@@ -56,7 +56,8 @@
 
     </node>
 
-    <node pkg="tf" type="static_transform_publisher" name="camera1_fleft_pose" args="0.073 0.073 0 -0.653 0.271 -0.271 0.653 $(arg stereopair_base_frame_id) $(arg UAV_NAME)/basler_left_optical 100" />
+<!--     <node pkg="tf" type="static_transform_publisher" name="camera1_fleft_pose" args="0.073 0.073 0 -0.653 0.271 -0.271 0.653 $(arg stereopair_base_frame_id) $(arg UAV_NAME)/basler_left_optical 100" /> -->
+    <node pkg="tf" type="static_transform_publisher" name="fleft_opt2fleft" args="0 0 0 0 0 0 1 $(arg UAV_NAME)/basler_left $(arg UAV_NAME)/basler_left_optical 100" />
     <node pkg="tf" type="static_transform_publisher" name="camera2_fright_pose" args="0.073 -0.073 0 -0.271 0.653 -0.653 0.271 $(arg stereopair_base_frame_id) $(arg UAV_NAME)/basler_right_optical 100" />
 
     <group ns="fleft">

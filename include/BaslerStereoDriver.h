@@ -82,6 +82,9 @@ namespace basler_stereo_driver {
 
         /* other parameters */
         std::string m_config_filename;
+
+        /* fleft camera pose */
+        Eigen::Affine3d m_fleft_pose = Eigen::Affine3d::Identity();
         // | --------------------- MRS transformer -------------------- |
 
         mrs_lib::Transformer m_transformer;
@@ -96,13 +99,16 @@ namespace basler_stereo_driver {
         // | --------------------- timer callbacks -------------------- |
         ros::Timer m_tim_find_BL;
         ros::Timer m_tim_tags_coordinates;
+        ros::Timer m_tim_fleft_pose;
 
         void m_tim_cbk_find_BL(const ros::TimerEvent &ev);
 
         void m_tim_cbk_tagcoor(const ros::TimerEvent &ev);
 
-        // | ----------------------- publishers ----------------------- |
+        void m_tim_cbk_fleft_pose(const ros::TimerEvent &ev);
 
+        // | ----------------------- publishers ----------------------- |
+        ros::Publisher m_pub_fleft_pose;
         // | ----------------------- subscribers ---------------------- |
         ros::Subscriber m_sub_camera_fleft;
         ros::Subscriber m_sub_camera_fright;
