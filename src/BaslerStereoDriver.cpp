@@ -81,16 +81,6 @@ namespace basler_stereo_driver {
                                           &BaslerStereoDriver::m_tim_cbk_fleft_pose,
                                           this);
 
-        // initialize the corrected transformation
-        Eigen::Affine3d initial_aff_transform = Eigen::Affine3d::Identity();
-
-        geometry_msgs::TransformStamped transform_msg = tf2::eigenToTransform(initial_aff_transform);
-
-        m_RL_error = mrs_lib::TransformStamped("basler_right_optical/tag_1",
-                                               "basler_left_optical/tag_1",
-                                               ros::Time::now(),
-                                               transform_msg);
-
         ROS_INFO_ONCE("[BaslerStereoDriver]: initialized");
 
         m_is_initialized = true;
@@ -113,7 +103,7 @@ namespace basler_stereo_driver {
 
 
     void BaslerStereoDriver::m_cbk_tag_detection_fleft(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg) {
-        std::lock_guard <std::mutex> lt{m_mut_pose_fleft};
+        std::lock_guard<std::mutex> lt{m_mut_pose_fleft};
         auto res = m_tag_detection_cbk_body("left", msg);
         if (res.has_value()) {
             m_left_tag_poses = res.value();
@@ -189,10 +179,7 @@ namespace basler_stereo_driver {
         auto transform = Eigen::Affine3d{umeyama(src, dst, false)};
 
         std::lock_guard lock{m_mut_RL_correction};
-        m_RL_error = mrs_lib::TransformStamped("basler_right_optical/tag_1",
-                                               "basler_left_optical/tag_1",
-                                               ros::Time::now(),
-                                               tf2::eigenToTransform(transform));
+        m_RL_error = transform;
     }
 
     void BaslerStereoDriver::m_tim_cbk_find_BL([[maybe_unused]] const ros::TimerEvent &ev) {
@@ -228,7 +215,7 @@ namespace basler_stereo_driver {
         if (T_BR.has_value() and T_BL_original.has_value()) {
             std::lock_guard lock{m_mut_RL_correction};
             const auto T_RL = T_BL_original->getTransformEigen() * T_BR->inverse().getTransformEigen();
-            const auto T_RL_corrected = m_RL_error.getTransformEigen().inverse() * T_RL;
+            const auto T_RL_corrected = m_RL_error.inverse() * T_RL;
             auto T_BL_corrected = T_RL_corrected * T_BR->getTransformEigen();
             // make a new frame - pose estimation
             std::lock_guard l{m_mut_filtered_pose};
@@ -283,7 +270,7 @@ namespace basler_stereo_driver {
         return res;
     }
 
-    std::optional <std::vector<geometry_msgs::Point>>
+    std::optional<std::vector<geometry_msgs::Point>>
     BaslerStereoDriver::m_tag_detection_cbk_body(const std::string &camera_name,
                                                  const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg) {
 

@@ -79,7 +79,7 @@ namespace basler_stereo_driver {
         ros::Time m_timestamp_fright{0};
         std::mutex m_mut_pose_fright;
 
-        mrs_lib::TransformStamped m_RL_error;
+        Eigen::Affine3d m_RL_error = Eigen::Affine3d::Identity();
         std::mutex m_mut_RL_correction;
 
         /* pose filter data */
