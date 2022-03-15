@@ -24,6 +24,11 @@ namespace basler_stereo_driver {
 
         pl.loadParam("UAV_NAME", m_uav_name);
         pl.loadParam("camera_poses_filename", m_config_filename);
+        pl.loadParam("base_frame_pose", m_name_base);
+        pl.loadParam("m_name_CL", m_name_CL);
+        pl.loadParam("m_name_CR", m_name_CR);
+        pl.loadParam("fleft_tag_det", m_name_fleft_tag_det);
+        pl.loadParam("fright_tag_det", m_name_fright_tag_det);
 
         auto fleft_rotation = pl.loadMatrixStatic2<3, 3>("fleft_camera/rotation");
         auto fleft_translation = pl.loadMatrixStatic2<3, 1>("fleft_camera/translation");
@@ -40,21 +45,18 @@ namespace basler_stereo_driver {
 
         // | ----------------- publishers initialize ------------------ |
 
-        m_pub_fleft_pose = nh.advertise<geometry_msgs::TransformStamped>("uav1/basler_left_optical_pose_publisher",
-                                                                         0);
-
         // | ---------------- subscribers initialize ------------------ |
-        m_sub_camera_fleft = nh.subscribe("/uav1/fleft/tag_detections",
+        m_sub_camera_fleft = nh.subscribe(m_name_fleft_tag_det,
                                           1,
                                           &BaslerStereoDriver::m_cbk_tag_detection_fleft,
                                           this);
 
-        m_sub_camera_fright = nh.subscribe("/uav1/fright/tag_detections",
+        m_sub_camera_fright = nh.subscribe(m_name_fright_tag_det,
                                            1,
                                            &BaslerStereoDriver::m_cbk_tag_detection_fright,
                                            this);
 
-        m_sub_complete_calibration = nh.subscribe("/uav1/complete",
+        m_sub_complete_calibration = nh.subscribe(m_uav_name + "/complete",
                                                   1,
                                                   &BaslerStereoDriver::m_cbk_complete_save_calibration,
                                                   this);
@@ -98,7 +100,7 @@ namespace basler_stereo_driver {
 
 // | ---------------------- msg callbacks --------------------- |
     void BaslerStereoDriver::m_cbk_tag_detection_fright(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg) {
-        std::lock_guard <std::mutex> lt{m_mut_pose_fright};
+        std::lock_guard<std::mutex> lt{m_mut_pose_fright};
         auto res = m_tag_detection_cbk_body("right", msg);
         if (res.has_value()) {
             m_right_tag_poses = res.value();
@@ -142,13 +144,12 @@ namespace basler_stereo_driver {
         // publish left camera pose (when camera pair is already calibrated)
         if (not m_is_initialized) return;
 
-        auto fleft_pose_stamped = tf2::eigenToTransform(m_fleft_pose);
+        geometry_msgs::TransformStamped fleft_pose_stamped = tf2::eigenToTransform(m_fleft_pose);
 
+        fleft_pose_stamped.header.frame_id = m_name_base;
+        fleft_pose_stamped.child_frame_id = m_name_CL;
         fleft_pose_stamped.header.stamp = ros::Time::now();
-        fleft_pose_stamped.header.frame_id = "uav1/basler_stereopair/base";
-        fleft_pose_stamped.child_frame_id = "uav1/basler_left";
-
-        m_pub_fleft_pose.publish(fleft_pose_stamped);
+        m_tbroadcaster.sendTransform(fleft_pose_stamped);
     }
 
     void BaslerStereoDriver::m_tim_cbk_tagcoor([[maybe_unused]] const ros::TimerEvent &ev) {
@@ -218,10 +219,10 @@ namespace basler_stereo_driver {
         }
         ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver] transform RL publisher");
         // TODO: check why transformer behave in this way (opposite to expected)
-        auto T_BR = m_transformer.getTransform("uav1/basler_right_optical",
-                                               "uav1/basler_stereopair/base");
-        auto T_BL_original = m_transformer.getTransform("uav1/basler_left_optical",
-                                                        "uav1/basler_stereopair/base");
+        auto T_BR = m_transformer.getTransform(m_name_CR,
+                                               m_name_base);
+        auto T_BL_original = m_transformer.getTransform(m_name_CL,
+                                                        m_name_base);
         geometry_msgs::TransformStamped T_BL_result;
 
         if (T_BR.has_value() and T_BL_original.has_value()) {
@@ -241,19 +242,19 @@ namespace basler_stereo_driver {
             ROS_ERROR_THROTTLE(2.0, "[BaslerStereoDriver] wrong transformation from L/R to base");
         }
         T_BL_result.header.stamp = ev.current_real;
-        T_BL_result.header.frame_id = "uav1/basler_stereopair/base";
-        T_BL_result.child_frame_id = "uav1/basler_left_optical_corrected";
+        T_BL_result.header.frame_id = m_name_base;
+        T_BL_result.child_frame_id = m_name_CL + "corrected";
 
         for (int i = 0; i < 12; ++i) {
             // find a translation for all tags to compare the result
-            auto L2tag = m_transformer.getTransform("uav1/basler_left_optical",
+            auto L2tag = m_transformer.getTransform(m_name_CL,
                                                     "basler_left_optical/tag_" + std::to_string(i));
 
             if (L2tag.has_value()) {
                 auto transform = L2tag.value().inverse().getTransform();
                 transform.header.stamp = ros::Time::now();
-                transform.header.frame_id = "uav1/basler_left_optical_corrected";
-                transform.child_frame_id = "uav1/tag_modified" + std::to_string(i);
+                transform.header.frame_id = m_name_CL + "corrected";
+                transform.child_frame_id = m_uav_name + "/tag_modified" + std::to_string(i);
                 m_tbroadcaster.sendTransform(transform);
             }
         }
@@ -300,9 +301,9 @@ namespace basler_stereo_driver {
                               msg_sorted.size());
             return std::nullopt;
         }
-        std::vector <geometry_msgs::PoseWithCovarianceStamped> poses_base_frame;
+        std::vector<geometry_msgs::PoseWithCovarianceStamped> poses_base_frame;
         for (const apriltag_ros::AprilTagDetection &el: msg_sorted) {
-            auto pose_cam_frame = m_transformer.transformSingle("uav1/basler_stereopair/base", el.pose);
+            auto pose_cam_frame = m_transformer.transformSingle(m_name_base, el.pose);
             if (pose_cam_frame.has_value()) {
                 poses_base_frame.push_back(pose_cam_frame.value());
             } else {
@@ -310,7 +311,7 @@ namespace basler_stereo_driver {
                                   camera_name.c_str());
             }
         }
-        std::vector <geometry_msgs::Point> result;
+        std::vector<geometry_msgs::Point> result;
         for (const auto &el: poses_base_frame) {
             result.push_back(el.pose.pose.position);
         }

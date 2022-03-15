@@ -62,6 +62,13 @@ namespace basler_stereo_driver {
 
         mrs_lib::TransformBroadcaster m_tbroadcaster;
 
+        /* node names parameters */
+        std::string m_name_fleft_tag_det;
+        std::string m_name_fright_tag_det;
+        std::string m_name_base;
+        std::string m_name_CL;
+        std::string m_name_CR;
+
         /* tag detection callback data */
 
         std::vector<geometry_msgs::Point> m_left_tag_poses;
@@ -108,7 +115,6 @@ namespace basler_stereo_driver {
         void m_tim_cbk_fleft_pose(const ros::TimerEvent &ev);
 
         // | ----------------------- publishers ----------------------- |
-        ros::Publisher m_pub_fleft_pose;
         // | ----------------------- subscribers ---------------------- |
         ros::Subscriber m_sub_camera_fleft;
         ros::Subscriber m_sub_camera_fright;
