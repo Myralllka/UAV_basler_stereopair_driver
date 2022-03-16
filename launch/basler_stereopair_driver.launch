@@ -10,6 +10,9 @@
   <!-- allows disabling the gui from command line -->
   <arg name="gui" default="true" />
 
+  <!-- if camera is calibrated or not -->
+  <arg name="is_calibrated" default="true" />
+
   <!-- will it run using GNU debugger? -->
   <arg name="debug" default="false" />
   <arg unless="$(arg debug)" name="launch_prefix_debug" value=""/>
@@ -42,6 +45,7 @@
       <param name="gui" type="bool" value="$(arg gui)"/>
 
       <param name="UAV_NAME" type="string" value="$(arg UAV_NAME)"/>
+      <param name="is_calibrated" type="bool" value="$(arg is_calibrated)"/>
       <param name="fleft_tag_det" type="string" value="/uav1/fleft/tag_detections"/>
       <param name="fright_tag_det" type="string" value="/uav1/fright/tag_detections"/>
       <param name="base_frame_pose" type="string" value="$(arg stereopair_base_frame_id)"/>

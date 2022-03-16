@@ -47,20 +47,6 @@ namespace basler_stereo_driver {
         // | ----------------- publishers initialize ------------------ |
 
         // | ---------------- subscribers initialize ------------------ |
-        m_sub_camera_fleft = nh.subscribe(m_name_fleft_tag_det,
-                                          1,
-                                          &BaslerStereoDriver::m_cbk_tag_detection_fleft,
-                                          this);
-
-        m_sub_camera_fright = nh.subscribe(m_name_fright_tag_det,
-                                           1,
-                                           &BaslerStereoDriver::m_cbk_tag_detection_fright,
-                                           this);
-
-        m_sub_complete_calibration = nh.subscribe(m_uav_name + "/complete",
-                                                  1,
-                                                  &BaslerStereoDriver::m_cbk_complete_save_calibration,
-                                                  this);
 
         // | --------------------- tf transformer --------------------- |
         m_transformer = mrs_lib::Transformer("basler_stereo_driver",
@@ -70,6 +56,7 @@ namespace basler_stereo_driver {
 
         ROS_ASSERT("[BaslerStereoDriver] timers initialisation");
 
+        // If pair is calibrated - publish the pose as already calibrated parameter
         if (m_is_calibrated) {
             m_tim_fleft_pose = nh.createTimer(ros::Duration(0.0001),
                                               &BaslerStereoDriver::m_tim_cbk_fleft_pose,
@@ -81,14 +68,27 @@ namespace basler_stereo_driver {
             m_tim_find_BL = nh.createTimer(ros::Duration(m_time_transformation),
                                            &BaslerStereoDriver::m_tim_cbk_find_BL,
                                            this);
+            // | ---------------- subscribers initialize ------------------ |
+
+            m_sub_camera_fleft = nh.subscribe(m_name_fleft_tag_det,
+                                              1,
+                                              &BaslerStereoDriver::m_cbk_tag_detection_fleft,
+                                              this);
+
+            m_sub_camera_fright = nh.subscribe(m_name_fright_tag_det,
+                                               1,
+                                               &BaslerStereoDriver::m_cbk_tag_detection_fright,
+                                               this);
+
+            m_sub_complete_calibration = nh.subscribe(m_uav_name + "/complete",
+                                                      1,
+                                                      &BaslerStereoDriver::m_cbk_complete_save_calibration,
+                                                      this);
         }
-
         ROS_INFO_ONCE("[BaslerStereoDriver]: initialized");
-
         m_is_initialized = true;
     }
 //}
-
 
 // | ---------------------- msg callbacks --------------------- |
     void BaslerStereoDriver::m_cbk_tag_detection_fright(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg) {
@@ -103,7 +103,6 @@ namespace basler_stereo_driver {
         }
     }
 
-
     void BaslerStereoDriver::m_cbk_tag_detection_fleft(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg) {
         std::lock_guard<std::mutex> lt{m_mut_pose_fleft};
         auto res = m_tag_detection_cbk_body("left", msg);
@@ -117,6 +116,7 @@ namespace basler_stereo_driver {
     }
 
     void BaslerStereoDriver::m_cbk_complete_save_calibration(std_msgs::Bool flag) {
+        // if calibration is completed and received flag is True - save all data and close the nodelet
         if (flag.data) {
             std::lock_guard l{m_mut_filtered_pose};
             std::ofstream fout(m_config_filename);
@@ -135,9 +135,7 @@ namespace basler_stereo_driver {
     void BaslerStereoDriver::m_tim_cbk_fleft_pose([[maybe_unused]] const ros::TimerEvent &ev) {
         // publish left camera pose (when camera pair is already calibrated)
         if (not m_is_initialized) return;
-
         geometry_msgs::TransformStamped fleft_pose_stamped = tf2::eigenToTransform(m_fleft_pose);
-
         fleft_pose_stamped.header.frame_id = m_name_base;
         fleft_pose_stamped.child_frame_id = m_name_CL;
         fleft_pose_stamped.header.stamp = ros::Time::now();
@@ -192,9 +190,7 @@ namespace basler_stereo_driver {
         // L - left camera optical pose
         // R - right camera optical pose
 
-        if (not m_is_initialized) {
-            return;
-        }
+        if (not m_is_initialized) return;
 
         {
             std::scoped_lock lck{m_mut_pose_fright, m_mut_pose_fleft};
@@ -207,7 +203,7 @@ namespace basler_stereo_driver {
             }
         }
         ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver] transform RL publisher");
-        // TODO: check why transformer behave in this way (opposite to expected)
+
         auto T_BR = m_transformer.getTransform(m_name_CR,
                                                m_name_base);
         auto T_BL_original = m_transformer.getTransform(m_name_CL,
@@ -261,11 +257,8 @@ namespace basler_stereo_driver {
         // apply simple filter
         using quat_t = Eigen::Quaterniond;
 
-        const int wght = 1;
-        auto result_translation =
-                (input_avg.translation() * (m_weight / wght) + other.translation()) / ((m_weight / wght) + 1);
-
-        auto result_rotation = quat_t{input_avg.rotation()}.slerp(1.0 / (static_cast<double>(m_weight) / wght + 1),
+        auto result_translation = (input_avg.translation() * m_weight + other.translation()) / (m_weight + 1);
+        auto result_rotation = quat_t{input_avg.rotation()}.slerp(1.0 / (static_cast<double>(m_weight) + 1),
                                                                   quat_t{other.rotation()});
         auto res = Eigen::Affine3d::Identity();
         res.translate(result_translation).rotate(result_rotation);

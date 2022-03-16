@@ -5,7 +5,6 @@
 #include <ros/ros.h>
 #include <ros/package.h>
 #include <nodelet/nodelet.h>
-#include <geometry_msgs/TransformStamped.h>
 
 /* some STL includes */
 #include <cstdlib>
@@ -28,6 +27,9 @@
 #include <apriltag_ros/AprilTagDetectionArray.h>
 #include <sensor_msgs/image_encodings.h>
 #include <std_msgs/builtin_bool.h>
+#include <Eigen/Core>
+#include <Eigen/Geometry>
+#include <geometry_msgs/TransformStamped.h>
 
 /* opencv */
 #include <cv_bridge/cv_bridge.h>
@@ -36,9 +38,6 @@
 #include "opencv2/calib3d.hpp"
 
 /* user includes */
-#include <Eigen/Core>
-#include <Eigen/Geometry>
-#include <Eigen/Geometry>
 
 //}
 
