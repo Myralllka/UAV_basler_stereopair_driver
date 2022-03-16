@@ -54,7 +54,7 @@ namespace basler_stereo_driver {
     private:
         /* flags */
         bool m_is_initialized = false;
-
+        bool m_is_calibrated = false;
         /* ros parameters */
         std::string m_uav_name;
         float m_time_transformation{0.001};

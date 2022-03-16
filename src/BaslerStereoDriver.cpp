@@ -1,4 +1,4 @@
-#include <BaslerStereoDriver.h>
+#include "BaslerStereoDriver.h"
 
 /* every nodelet must include macros which export the class as a nodelet plugin */
 #include <pluginlib/class_list_macros.h>
@@ -26,6 +26,7 @@ namespace basler_stereo_driver {
         pl.loadParam("camera_poses_filename", m_config_filename);
         pl.loadParam("base_frame_pose", m_name_base);
         pl.loadParam("m_name_CL", m_name_CL);
+        pl.loadParam("is_calibrated", m_is_calibrated);
         pl.loadParam("m_name_CR", m_name_CR);
         pl.loadParam("fleft_tag_det", m_name_fleft_tag_det);
         pl.loadParam("fright_tag_det", m_name_fright_tag_det);
@@ -69,17 +70,18 @@ namespace basler_stereo_driver {
 
         ROS_ASSERT("[BaslerStereoDriver] timers initialisation");
 
-//        m_tim_tags_coordinates = nh.createTimer(ros::Duration(m_time_tagcoor),
-//                                                &BaslerStereoDriver::m_tim_cbk_tagcoor,
-//                                                this);
-//
-//        m_tim_find_BL = nh.createTimer(ros::Duration(m_time_transformation),
-//                                       &BaslerStereoDriver::m_tim_cbk_find_BL,
-//                                       this);
-
-        m_tim_fleft_pose = nh.createTimer(ros::Duration(0.0001),
-                                          &BaslerStereoDriver::m_tim_cbk_fleft_pose,
-                                          this);
+        if (m_is_calibrated) {
+            m_tim_fleft_pose = nh.createTimer(ros::Duration(0.0001),
+                                              &BaslerStereoDriver::m_tim_cbk_fleft_pose,
+                                              this);
+        } else {
+            m_tim_tags_coordinates = nh.createTimer(ros::Duration(m_time_tagcoor),
+                                                    &BaslerStereoDriver::m_tim_cbk_tagcoor,
+                                                    this);
+            m_tim_find_BL = nh.createTimer(ros::Duration(m_time_transformation),
+                                           &BaslerStereoDriver::m_tim_cbk_find_BL,
+                                           this);
+        }
 
         ROS_INFO_ONCE("[BaslerStereoDriver]: initialized");
 
