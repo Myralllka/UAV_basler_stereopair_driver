@@ -15,7 +15,7 @@ windows:
       panes:
         - waitForRos; rosrun rqt_image_view rqt_image_view /uav1/fleft/tag_detections_image
         - waitForRos; rosrun rqt_image_view rqt_image_view /uav1/fright/tag_detections_image
-  - uav_camera_localisation:
+  - basler_stereo_driver:
       layout: tiled
       panes:
         - waitForRos; roslaunch basler_stereopair_driver basler_stereopair_driver.launch is_calibrated:=false

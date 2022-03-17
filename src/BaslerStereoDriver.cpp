@@ -57,11 +57,7 @@ namespace basler_stereo_driver {
         ROS_ASSERT("[BaslerStereoDriver] timers initialisation");
 
         // If pair is calibrated - publish the pose as already calibrated parameter
-        if (m_is_calibrated) {
-            m_tim_fleft_pose = nh.createTimer(ros::Duration(0.0001),
-                                              &BaslerStereoDriver::m_tim_cbk_fleft_pose,
-                                              this);
-        } else {
+        if (not m_is_calibrated) {
             m_tim_tags_coordinates = nh.createTimer(ros::Duration(m_time_tagcoor),
                                                     &BaslerStereoDriver::m_tim_cbk_tagcoor,
                                                     this);
@@ -85,6 +81,9 @@ namespace basler_stereo_driver {
                                                       &BaslerStereoDriver::m_cbk_complete_save_calibration,
                                                       this);
         }
+        m_tim_fleft_pose = nh.createTimer(ros::Duration(0.0001),
+                                          &BaslerStereoDriver::m_tim_cbk_fleft_pose,
+                                          this);
         ROS_INFO_ONCE("[BaslerStereoDriver]: initialized");
         m_is_initialized = true;
     }
