@@ -20,12 +20,14 @@
 #include <mrs_lib/param_loader.h>
 #include <mrs_lib/transformer.h>
 #include <mrs_lib/transform_broadcaster.h>
+#include <mrs_lib/subscribe_handler.h>
 
 /* other important includes */
 #include <nav_msgs/Odometry.h>
 #include <tf2_ros/transform_broadcaster.h>
 #include <apriltag_ros/AprilTagDetectionArray.h>
 #include <sensor_msgs/image_encodings.h>
+#include <sensor_msgs/Image.h>
 #include <std_msgs/builtin_bool.h>
 #include <Eigen/Core>
 #include <Eigen/Geometry>
@@ -36,6 +38,8 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui.hpp>
 #include "opencv2/calib3d.hpp"
+#include "opencv2/features2d/features2d.hpp"
+#include "opencv2/highgui/highgui.hpp"
 
 /* user includes */
 
@@ -106,6 +110,7 @@ namespace basler_stereo_driver {
         ros::Timer m_tim_find_BL;
         ros::Timer m_tim_tags_coordinates;
         ros::Timer m_tim_fleft_pose;
+        ros::Timer m_tim_mse;
 
         void m_tim_cbk_find_BL(const ros::TimerEvent &ev);
 
@@ -113,12 +118,17 @@ namespace basler_stereo_driver {
 
         void m_tim_cbk_fleft_pose(const ros::TimerEvent &ev);
 
+        void m_tim_cbk_tags_errors(const ros::TimerEvent &ev);
+
         // | ----------------------- publishers ----------------------- |
         // | ----------------------- subscribers ---------------------- |
         ros::Subscriber m_sub_camera_fleft;
         ros::Subscriber m_sub_camera_fright;
 
         ros::Subscriber m_sub_complete_calibration;
+
+        mrs_lib::SubscribeHandler<sensor_msgs::Image> m_imleft_handler;
+        mrs_lib::SubscribeHandler<sensor_msgs::Image> m_imright_handler;
 
         // | --------------------- other functions -------------------- |
         std::optional<std::vector<geometry_msgs::Point>>

@@ -65,21 +65,34 @@ namespace basler_stereo_driver {
                                            &BaslerStereoDriver::m_tim_cbk_find_BL,
                                            this);
             // | ---------------- subscribers initialize ------------------ |
-
-            m_sub_camera_fleft = nh.subscribe(m_name_fleft_tag_det,
-                                              1,
-                                              &BaslerStereoDriver::m_cbk_tag_detection_fleft,
-                                              this);
-
-            m_sub_camera_fright = nh.subscribe(m_name_fright_tag_det,
-                                               1,
-                                               &BaslerStereoDriver::m_cbk_tag_detection_fright,
-                                               this);
-
             m_sub_complete_calibration = nh.subscribe(m_uav_name + "/complete",
                                                       1,
                                                       &BaslerStereoDriver::m_cbk_complete_save_calibration,
                                                       this);
+        } else {
+            m_tim_mse = nh.createTimer(ros::Duration(0.0001),
+                                       &BaslerStereoDriver::m_tim_cbk_tags_errors,
+                                       this);
+            m_sub_camera_fleft = nh.subscribe(m_name_fleft_tag_det,
+                                              1,
+                                              &BaslerStereoDriver::m_cbk_tag_detection_fleft,
+                                              this);
+            m_sub_camera_fright = nh.subscribe(m_name_fright_tag_det,
+                                               1,
+                                               &BaslerStereoDriver::m_cbk_tag_detection_fright,
+                                               this);
+            // for epipolar lines drawing I'll use subscriber handler
+            mrs_lib::SubscribeHandlerOptions shopt{nh};
+            shopt.node_name = "BaslerStereoDriver";
+            shopt.threadsafe = true;
+            shopt.no_message_timeout = ros::Duration(1.0);
+            mrs_lib::construct_object(m_imleft_handler,
+                                      shopt,
+                                      m_uav_name + "/fleft/tag_detections_image");
+            mrs_lib::construct_object(m_imright_handler,
+                                      shopt,
+                                      m_uav_name + "/fright/tag_detections_image");
+
         }
         m_tim_fleft_pose = nh.createTimer(ros::Duration(0.0001),
                                           &BaslerStereoDriver::m_tim_cbk_fleft_pose,
@@ -248,6 +261,42 @@ namespace basler_stereo_driver {
                           T_BL_result.header.frame_id.c_str(),
                           T_BL_result.child_frame_id.c_str(),
                           T_BL_result.header.stamp.nsec);
+    }
+
+    void BaslerStereoDriver::m_tim_cbk_tags_errors([[maybe_unused]] const ros::TimerEvent &ev) {
+        // timer callback to calculate mean square error in euclidean 3d space between tags
+
+        if (not m_is_initialized) return;
+        {
+            std::scoped_lock lck{m_mut_pose_fright, m_mut_pose_fleft};
+            if (m_right_tag_poses.empty() or m_left_tag_poses.empty()) return;
+            if (std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()) > ros::Duration(0.2).toSec()) {
+                ROS_WARN_THROTTLE(1.0,
+                                  "[BaslerStereoDriver]: tags coordinates timestamps are too far away from each other: %f",
+                                  std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()));
+                return;
+            }
+            ROS_INFO_THROTTLE(1.0, "[BaslerStereoDriver]: tags timestamps are okay");
+        }
+        double MSE_res = 0;
+        double MAE_res = 0;
+        for (int i = 0; i < 12; ++i) {
+            // find a translation for all tags to compare the result
+            auto Ltag2Rtag = m_transformer.getTransform("basler_right_optical/tag_" + std::to_string(i),
+                                                        "basler_left_optical/tag_" + std::to_string(i));
+            if (Ltag2Rtag.has_value()) {
+                MSE_res += std::pow(Ltag2Rtag.value().getTransformEigen().translation().norm(), 2);
+                MAE_res += std::abs(Ltag2Rtag.value().getTransformEigen().translation().norm());
+            }
+        }
+        ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver]: \n\t\t\tMSE == %lf\n\t\t\tMAE == %lf",
+                          MSE_res / 12.0,
+                          MAE_res / 12.0);
+
+        ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver]: looking for correspondences");
+        if (m_imleft_handler.hasMsg()) {
+            std::cout << "here!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+        }
     }
 // | -------------------- other functions ------------------- |
 
