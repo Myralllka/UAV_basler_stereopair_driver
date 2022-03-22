@@ -31,6 +31,11 @@ namespace basler_stereo_driver {
         pl.loadParam("fleft_tag_det", m_name_fleft_tag_det);
         pl.loadParam("fright_tag_det", m_name_fright_tag_det);
 
+        // intrinsic camera parameters (calibration matrices)
+        cv::eigen2cv(pl.loadMatrixStatic2<3, 3>("basler_left/camera_matrix/data"), m_K_CL);
+        cv::eigen2cv(pl.loadMatrixStatic2<3, 3>("basler_right/camera_matrix/data"), m_K_CR);
+
+        // stereopair pose parameters
         auto fleft_rotation = pl.loadMatrixStatic2<3, 3>("fleft_camera/rotation");
         auto fleft_translation = pl.loadMatrixStatic2<3, 1>("fleft_camera/translation");
 
@@ -45,6 +50,7 @@ namespace basler_stereo_driver {
         // | ---------------- some data post-processing --------------- |
 
         // | ----------------- publishers initialize ------------------ |
+        m_pub_im_corresp = nh.advertise<sensor_msgs::Image>("im_corresp", 1);
 
         // | ---------------- subscribers initialize ------------------ |
 
@@ -73,6 +79,9 @@ namespace basler_stereo_driver {
             m_tim_mse = nh.createTimer(ros::Duration(0.0001),
                                        &BaslerStereoDriver::m_tim_cbk_tags_errors,
                                        this);
+            m_tim_corresp = nh.createTimer(ros::Duration(0.0001),
+                                           &BaslerStereoDriver::m_tim_cbk_corresp,
+                                           this);
             m_sub_camera_fleft = nh.subscribe(m_name_fleft_tag_det,
                                               1,
                                               &BaslerStereoDriver::m_cbk_tag_detection_fleft,
@@ -88,11 +97,10 @@ namespace basler_stereo_driver {
             shopt.no_message_timeout = ros::Duration(1.0);
             mrs_lib::construct_object(m_imleft_handler,
                                       shopt,
-                                      m_uav_name + "/fleft/tag_detections_image");
+                                      "/" + m_uav_name + "/fleft/tag_detections_image");
             mrs_lib::construct_object(m_imright_handler,
                                       shopt,
-                                      m_uav_name + "/fright/tag_detections_image");
-
+                                      "/" + m_uav_name + "/fright/tag_detections_image");
         }
         m_tim_fleft_pose = nh.createTimer(ros::Duration(0.0001),
                                           &BaslerStereoDriver::m_tim_cbk_fleft_pose,
@@ -292,10 +300,63 @@ namespace basler_stereo_driver {
         ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver]: \n\t\t\tMSE == %lf\n\t\t\tMAE == %lf",
                           MSE_res / 12.0,
                           MAE_res / 12.0);
+    }
 
-        ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver]: looking for correspondences");
-        if (m_imleft_handler.hasMsg()) {
-            std::cout << "here!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+    void BaslerStereoDriver::m_tim_cbk_corresp([[maybe_unused]] const ros::TimerEvent &ev) {
+        if (not m_is_initialized) return;
+
+        if (m_imleft_handler.newMsg() and m_imright_handler.newMsg()) {
+            ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver]: looking for F");
+
+            auto RL = m_transformer.getTransform(m_name_CL,
+                                                 m_name_CR,
+                                                 ros::Time::now());
+            // m_F will be essential matrix here
+            cv::eigen2cv(static_cast<Eigen::Matrix3d>(-sqs(RL->getTransformEigen().translation()) *
+                                                      RL->getTransformEigen().rotation().matrix()),
+                         m_F);
+            // now let's make it fundamental
+            m_F = m_K_CL.inv().t() * m_F * m_K_CR.inv();
+            std::cout << m_F << std::endl;
+            ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver]: looking for correspondences");
+            auto cv_image_left = cv_bridge::toCvCopy(m_imleft_handler.getMsg(), "bgr8").get()->image;
+            auto cv_image_right = cv_bridge::toCvCopy(m_imright_handler.getMsg(), "bgr8").get()->image;
+
+            cv::cvtColor(cv_image_left, cv_image_left, cv::COLOR_BGR2GRAY);
+            cv::cvtColor(cv_image_right, cv_image_right, cv::COLOR_BGR2GRAY);
+
+            // clear previous dynamic storages
+            keypoints1.clear();
+            keypoints2.clear();
+            keypoints1_p.clear();
+            keypoints2_p.clear();
+            epipolar_lines.clear();
+
+            // Detect ORB features and compute descriptors.
+            detector->detectAndCompute(cv_image_left, cv::Mat(), keypoints1, descriptor1);
+            detector->detectAndCompute(cv_image_right, cv::Mat(), keypoints2, descriptor2);
+
+            matcher->match(descriptor1, descriptor2, matches, cv::Mat());
+
+            std::sort(matches.begin(), matches.end());
+            const int num_good_matches = matches.size() * 0.15f;
+
+            matches.erase(matches.begin() + num_good_matches, matches.end());
+
+            cv::Mat im_matches;
+            cv::drawMatches(cv_image_left, keypoints1,
+                            cv_image_right, keypoints2,
+                            matches, im_matches);
+
+            m_pub_im_corresp.publish(cv_bridge::CvImage(std_msgs::Header(), "bgr8", im_matches).toImageMsg());
+            cv::KeyPoint::convert(keypoints1_p, keypoints1);
+            cv::KeyPoint::convert(keypoints2_p, keypoints2);
+
+            cv::computeCorrespondEpilines(keypoints1_p, 1, m_F, lines1);
+            cv::computeCorrespondEpilines(keypoints2_p, 2, m_F, lines2);
+
+        } else {
+            ROS_WARN_THROTTLE(2.0, "[BaslerStereoDriver]: No new images to search for correspondences");
         }
     }
 // | -------------------- other functions ------------------- |
