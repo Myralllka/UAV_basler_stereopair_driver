@@ -15,6 +15,7 @@
 #include <cstring>
 #include <fstream>
 #include <vector>
+#include <random>
 
 /* custom helper functions from our library */
 #include <mrs_lib/param_loader.h>
@@ -87,11 +88,10 @@ namespace basler_stereo_driver {
         cv::Mat descriptor1, descriptor2;
         std::vector<cv::KeyPoint> keypoints1, keypoints2;
         std::vector<cv::Point2f> keypoints1_p, keypoints2_p;
-        std::vector<cv::Mat> lines1, lines2;
+        std::vector<cv::Point3f> lines1, lines2;
         std::vector<cv::DMatch> matches;
         cv::Ptr<cv::DescriptorMatcher> matcher = cv::DescriptorMatcher::create(cv::DescriptorMatcher::BRUTEFORCE);
         cv::Ptr<cv::Feature2D> detector = cv::ORB::create(1000);
-//        cv::Matx<double, 3, 3> m_F;
         cv::Mat m_F, m_K_CL, m_K_CR;
         std::vector<cv::Vec3f> epipolar_lines;
 
@@ -148,6 +148,8 @@ namespace basler_stereo_driver {
 
         // | ----------------------- publishers ----------------------- |
         ros::Publisher m_pub_im_corresp;
+        ros::Publisher m_pub_im_epiright;
+        ros::Publisher m_pub_im_epileft;
         // | ----------------------- subscribers ---------------------- |
         ros::Subscriber m_sub_camera_fleft;
         ros::Subscriber m_sub_camera_fright;

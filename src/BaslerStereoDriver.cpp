@@ -52,6 +52,9 @@ namespace basler_stereo_driver {
         // | ----------------- publishers initialize ------------------ |
         m_pub_im_corresp = nh.advertise<sensor_msgs::Image>("im_corresp", 1);
 
+        m_pub_im_epileft = nh.advertise<sensor_msgs::Image>("im_epiright", 1);
+        m_pub_im_epiright = nh.advertise<sensor_msgs::Image>("im_epileft", 1);
+
         // | ---------------- subscribers initialize ------------------ |
 
         // | --------------------- tf transformer --------------------- |
@@ -82,14 +85,6 @@ namespace basler_stereo_driver {
             m_tim_corresp = nh.createTimer(ros::Duration(0.0001),
                                            &BaslerStereoDriver::m_tim_cbk_corresp,
                                            this);
-            m_sub_camera_fleft = nh.subscribe(m_name_fleft_tag_det,
-                                              1,
-                                              &BaslerStereoDriver::m_cbk_tag_detection_fleft,
-                                              this);
-            m_sub_camera_fright = nh.subscribe(m_name_fright_tag_det,
-                                               1,
-                                               &BaslerStereoDriver::m_cbk_tag_detection_fright,
-                                               this);
             // for epipolar lines drawing I'll use subscriber handler
             mrs_lib::SubscribeHandlerOptions shopt{nh};
             shopt.node_name = "BaslerStereoDriver";
@@ -105,6 +100,14 @@ namespace basler_stereo_driver {
         m_tim_fleft_pose = nh.createTimer(ros::Duration(0.0001),
                                           &BaslerStereoDriver::m_tim_cbk_fleft_pose,
                                           this);
+        m_sub_camera_fleft = nh.subscribe(m_name_fleft_tag_det,
+                                          1,
+                                          &BaslerStereoDriver::m_cbk_tag_detection_fleft,
+                                          this);
+        m_sub_camera_fright = nh.subscribe(m_name_fright_tag_det,
+                                           1,
+                                           &BaslerStereoDriver::m_cbk_tag_detection_fright,
+                                           this);
         ROS_INFO_ONCE("[BaslerStereoDriver]: initialized");
         m_is_initialized = true;
     }
@@ -302,6 +305,41 @@ namespace basler_stereo_driver {
                           MAE_res / 12.0);
     }
 
+    [[maybe_unused]] void draw_epipolar_line(cv::Mat &img,
+                                             std::vector<cv::Point3f> &line,
+                                             const std::vector<cv::Point2f> &pts) {
+        // source https://docs.opencv.org/3.4/da/de9/tutorial_py_epipolar_geometry.html
+//        auto h = img.size[0]; // r
+        auto w = img.size[1]; // c
+        std::random_device rd;
+        std::mt19937 generator(rd());
+        std::uniform_int_distribution<uint8_t> distribution{0, 255};
+        for (size_t i = 0; i < line.size(); ++i) {
+//        for (size_t i = 0; i < 100; i += 20) {
+            // randomly generate line color
+            const int r = distribution(generator);
+            const int g = distribution(generator);
+            const int b = distribution(generator);
+
+            auto color = cv::Scalar(b, g, r);
+            auto x0 = .0f;
+            auto x1 = static_cast<double>(w);
+
+            double l0 = line[i].x;
+            double l1 = line[i].y;
+            double l2 = line[i].z;
+
+            double y0 = -l2 / l1;
+            double y1 = -(l2 + l0 * w) / l1;
+
+            auto p1 = cv::Point{static_cast<int>(std::round(x0)), static_cast<int>(std::ceil(y0))};
+            auto p2 = cv::Point{static_cast<int>(std::round(x1)), static_cast<int>(std::ceil(y1))};
+
+            cv::line(img, p1, p2, color, 3);
+            cv::circle(img, pts[i], 2, color, 5);
+        }
+    }
+
     void BaslerStereoDriver::m_tim_cbk_corresp([[maybe_unused]] const ros::TimerEvent &ev) {
         if (not m_is_initialized) return;
 
@@ -311,50 +349,67 @@ namespace basler_stereo_driver {
             auto RL = m_transformer.getTransform(m_name_CL,
                                                  m_name_CR,
                                                  ros::Time::now());
+
             // m_F will be essential matrix here
             cv::eigen2cv(static_cast<Eigen::Matrix3d>(-sqs(RL->getTransformEigen().translation()) *
                                                       RL->getTransformEigen().rotation().matrix()),
                          m_F);
             // now let's make it fundamental
-            m_F = m_K_CL.inv().t() * m_F * m_K_CR.inv();
-            std::cout << m_F << std::endl;
+            m_F = m_K_CR.inv().t() * m_F * m_K_CL.inv();
             ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver]: looking for correspondences");
             auto cv_image_left = cv_bridge::toCvCopy(m_imleft_handler.getMsg(), "bgr8").get()->image;
             auto cv_image_right = cv_bridge::toCvCopy(m_imright_handler.getMsg(), "bgr8").get()->image;
-
-            cv::cvtColor(cv_image_left, cv_image_left, cv::COLOR_BGR2GRAY);
-            cv::cvtColor(cv_image_right, cv_image_right, cv::COLOR_BGR2GRAY);
+            cv::Mat im_gray_left, im_gray_right;
+            cv::cvtColor(cv_image_left, im_gray_left, cv::COLOR_BGR2GRAY);
+            cv::cvtColor(cv_image_right, im_gray_right, cv::COLOR_BGR2GRAY);
 
             // clear previous dynamic storages
+            lines1.clear();
+            lines2.clear();
             keypoints1.clear();
             keypoints2.clear();
             keypoints1_p.clear();
             keypoints2_p.clear();
             epipolar_lines.clear();
+            std::vector<int> mask1;
 
             // Detect ORB features and compute descriptors.
-            detector->detectAndCompute(cv_image_left, cv::Mat(), keypoints1, descriptor1);
-            detector->detectAndCompute(cv_image_right, cv::Mat(), keypoints2, descriptor2);
+            detector->detectAndCompute(im_gray_left, cv::Mat(), keypoints1, descriptor1);
+            detector->detectAndCompute(im_gray_right, cv::Mat(), keypoints2, descriptor2);
+
+            cv::KeyPoint::convert(keypoints1, keypoints1_p);
+            cv::KeyPoint::convert(keypoints2, keypoints2_p);
+            auto H = cv::findHomography(keypoints1_p, keypoints2_p, cv::RANSAC, 3.0, mask1, 10000);
+            cv::Mat dst;
+            keypoints1_p.clear();
+            keypoints2_p.clear();
+            cv::warpPerspective(im_gray_left, dst, H, im_gray_left.size() * 2);
+            std::vector<int> idxs_nonz;
+            for (size_t i = 0; i < mask1.size(); ++i) {
+                if (mask1[i] == 0) continue;
+                idxs_nonz.push_back(i);
+            }
+            cv::KeyPoint::convert(keypoints1, keypoints1_p, idxs_nonz);
+            cv::KeyPoint::convert(keypoints2, keypoints2_p, idxs_nonz);
+
+            cv::computeCorrespondEpilines(keypoints1_p, 1, m_F, lines2);
+            cv::computeCorrespondEpilines(keypoints2_p, 2, m_F, lines1);
 
             matcher->match(descriptor1, descriptor2, matches, cv::Mat());
-
             std::sort(matches.begin(), matches.end());
-            const int num_good_matches = matches.size() * 0.15f;
-
+            const int num_good_matches = matches.size() * 0.05f;
             matches.erase(matches.begin() + num_good_matches, matches.end());
 
             cv::Mat im_matches;
-            cv::drawMatches(cv_image_left, keypoints1,
-                            cv_image_right, keypoints2,
-                            matches, im_matches);
 
+            cv::drawMatches(cv_image_left, keypoints1, cv_image_right, keypoints2, matches, im_matches);
             m_pub_im_corresp.publish(cv_bridge::CvImage(std_msgs::Header(), "bgr8", im_matches).toImageMsg());
-            cv::KeyPoint::convert(keypoints1_p, keypoints1);
-            cv::KeyPoint::convert(keypoints2_p, keypoints2);
-
-            cv::computeCorrespondEpilines(keypoints1_p, 1, m_F, lines1);
-            cv::computeCorrespondEpilines(keypoints2_p, 2, m_F, lines2);
-
+            // draw epipolar lines
+            draw_epipolar_line(cv_image_left, lines2, keypoints1_p);
+            draw_epipolar_line(cv_image_right, lines1, keypoints2_p);
+            // publish epipolar lines
+            m_pub_im_epileft.publish(cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image_left).toImageMsg());
+            m_pub_im_epiright.publish(cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image_right).toImageMsg());
         } else {
             ROS_WARN_THROTTLE(2.0, "[BaslerStereoDriver]: No new images to search for correspondences");
         }
