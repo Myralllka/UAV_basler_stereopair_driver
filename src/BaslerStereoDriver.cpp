@@ -346,12 +346,12 @@ namespace basler_stereo_driver {
         if (m_imleft_handler.newMsg() and m_imright_handler.newMsg()) {
             ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver]: looking for F");
 
-            auto RL = m_transformer.getTransform(m_name_CL,
-                                                 m_name_CR,
+            auto RL = m_transformer.getTransform(m_name_CR,
+                                                 m_name_CL,
                                                  ros::Time::now());
 
             // m_F will be essential matrix here
-            cv::eigen2cv(static_cast<Eigen::Matrix3d>(-sqs(RL->getTransformEigen().translation()) *
+            cv::eigen2cv(static_cast<Eigen::Matrix3d>(-sqs(RL->getTransformEigen().translation().matrix()) *
                                                       RL->getTransformEigen().rotation().matrix()),
                          m_F);
             // now let's make it fundamental
