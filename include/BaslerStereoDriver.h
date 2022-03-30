@@ -33,9 +33,11 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <geometry_msgs/TransformStamped.h>
+#include <image_geometry/pinhole_camera_model.h>
 
 /* opencv */
 #include <cv_bridge/cv_bridge.h>
+#include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui.hpp>
@@ -110,8 +112,8 @@ namespace basler_stereo_driver {
 
         /* pose filter data */
         size_t m_weight{0};
-        std::mutex m_mut_filtered_pose;
-        Eigen::Affine3d m_filtered_pose;
+        std::mutex m_mut_filtered_CL_pose;
+        Eigen::Affine3d m_filtered_CL_pose;
 
         /* other parameters */
         std::string m_config_filename;
@@ -153,11 +155,18 @@ namespace basler_stereo_driver {
         // | ----------------------- subscribers ---------------------- |
         ros::Subscriber m_sub_camera_fleft;
         ros::Subscriber m_sub_camera_fright;
-
         ros::Subscriber m_sub_complete_calibration;
 
-        mrs_lib::SubscribeHandler<sensor_msgs::Image> m_imleft_handler;
-        mrs_lib::SubscribeHandler<sensor_msgs::Image> m_imright_handler;
+        // | ------------------ subscriber handlers ------------------- |
+        mrs_lib::SubscribeHandler<sensor_msgs::Image> m_handler_imleft;
+        mrs_lib::SubscribeHandler<sensor_msgs::Image> m_handler_imright;
+
+        mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo> m_handler_camleftinfo;
+        mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo> m_handler_camrightinfo;
+
+        // | ---------------- pinhole camera models ------------------- |
+        image_geometry::PinholeCameraModel m_camera_left;
+        image_geometry::PinholeCameraModel m_camera_right;
 
         // | --------------------- other functions -------------------- |
         std::optional<std::vector<geometry_msgs::Point>>

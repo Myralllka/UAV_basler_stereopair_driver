@@ -19,6 +19,7 @@
   <depend>mrs_lib</depend>
   <depend>nav_msgs</depend>
   <depend>cv_bridge</depend>
+  <depend>image_geometry</depend>
   <depend>pylon_camera</depend> <!--https://mrs.felk.cvut.cz/gitlab/uav/drivers/pylon-ros-camera/tree/sdk6.2.0-->
   <depend>apriltag_ros</depend> <!-- https://github.com/AprilRobotics/apriltag_ros -->
 

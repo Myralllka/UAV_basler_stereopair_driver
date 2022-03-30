@@ -51,7 +51,6 @@ namespace basler_stereo_driver {
 
         // | ----------------- publishers initialize ------------------ |
         m_pub_im_corresp = nh.advertise<sensor_msgs::Image>("im_corresp", 1);
-
         m_pub_im_epileft = nh.advertise<sensor_msgs::Image>("im_epiright", 1);
         m_pub_im_epiright = nh.advertise<sensor_msgs::Image>("im_epileft", 1);
 
@@ -90,12 +89,26 @@ namespace basler_stereo_driver {
             shopt.node_name = "BaslerStereoDriver";
             shopt.threadsafe = true;
             shopt.no_message_timeout = ros::Duration(1.0);
-            mrs_lib::construct_object(m_imleft_handler,
+            mrs_lib::construct_object(m_handler_imleft,
                                       shopt,
                                       "/" + m_uav_name + "/fleft/tag_detections_image");
-            mrs_lib::construct_object(m_imright_handler,
+//                                      "/" + m_uav_name + "/basler_left/image_rect");
+            mrs_lib::construct_object(m_handler_imright,
                                       shopt,
                                       "/" + m_uav_name + "/fright/tag_detections_image");
+//                                      "/" + m_uav_name + "/basler_right/image_rect");
+            mrs_lib::construct_object(m_handler_camleftinfo,
+                                      shopt,
+                                      "/" + m_uav_name + "/basler_left/camera_info");
+            mrs_lib::construct_object(m_handler_camrightinfo,
+                                      shopt,
+                                      "/" + m_uav_name + "/basler_right/camera_info");
+            // initialize cameras with pinhole modeller
+            while (not(m_handler_camleftinfo.newMsg() and m_handler_camrightinfo.newMsg())) {
+                ROS_WARN_THROTTLE(1.0, "[BaslerStereoDriver]: waiting for camera info messages");
+            }
+            m_camera_right.fromCameraInfo(m_handler_camrightinfo.getMsg());
+            m_camera_left.fromCameraInfo(m_handler_camleftinfo.getMsg());
         }
         m_tim_fleft_pose = nh.createTimer(ros::Duration(0.0001),
                                           &BaslerStereoDriver::m_tim_cbk_fleft_pose,
@@ -141,14 +154,14 @@ namespace basler_stereo_driver {
     void BaslerStereoDriver::m_cbk_complete_save_calibration(std_msgs::Bool flag) {
         // if calibration is completed and received flag is True - save all data and close the nodelet
         if (flag.data) {
-            std::lock_guard l{m_mut_filtered_pose};
+            std::lock_guard l{m_mut_filtered_CL_pose};
             std::ofstream fout(m_config_filename);
             Eigen::IOFormat fmt{3, 0, ", ", ",\n", "", "", "[", "]"};
             fout << "fleft_camera:\n";
             fout << "\trotation: "
-                 << m_filtered_pose.rotation().format(fmt)
+                 << m_filtered_CL_pose.rotation().format(fmt)
                  << std::endl;
-            fout << "\ttranslation: " << m_filtered_pose.translation().format(fmt) << std::endl;
+            fout << "\ttranslation: " << m_filtered_CL_pose.translation().format(fmt) << std::endl;
             ros::shutdown();
         }
     }
@@ -239,12 +252,12 @@ namespace basler_stereo_driver {
             const auto T_RL_corrected = m_RL_error.inverse() * T_RL;
             auto T_BL_corrected = T_RL_corrected * T_BR->getTransformEigen();
             // make a new frame - pose estimation
-            std::lock_guard l{m_mut_filtered_pose};
+            std::lock_guard l{m_mut_filtered_CL_pose};
             if (not m_weight) {
-                m_filtered_pose = T_BL_corrected;
+                m_filtered_CL_pose = T_BL_corrected;
             }
             ++m_weight;
-            T_BL_result = tf2::eigenToTransform(m_interpolate_pose(m_filtered_pose, T_BL_corrected));
+            T_BL_result = tf2::eigenToTransform(m_interpolate_pose(m_filtered_CL_pose, T_BL_corrected));
 
         } else {
             ROS_ERROR_THROTTLE(2.0, "[BaslerStereoDriver] wrong transformation from L/R to base");
@@ -274,14 +287,25 @@ namespace basler_stereo_driver {
                           T_BL_result.header.stamp.nsec);
     }
 
+    [[maybe_unused]] cv::Scalar generate_random_color() {
+        std::random_device rd;
+        std::mt19937 generator(rd());
+        std::uniform_int_distribution<uint8_t> distribution{0, 255};
+
+        uint8_t r = distribution(generator);
+        uint8_t g = distribution(generator);
+        uint8_t b = distribution(generator);
+        return cv::Scalar(b, g, r);
+    }
+
     void BaslerStereoDriver::m_tim_cbk_tags_errors([[maybe_unused]] const ros::TimerEvent &ev) {
-        // timer callback to calculate mean square error in euclidean 3d space between tags
+        // timer callback to calculate error in euclidean 3d space between tags
 
         if (not m_is_initialized) return;
         {
             std::scoped_lock lck{m_mut_pose_fright, m_mut_pose_fleft};
             if (m_right_tag_poses.empty() or m_left_tag_poses.empty()) return;
-            if (std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()) > ros::Duration(0.2).toSec()) {
+            if (std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()) > ros::Duration(0.1).toSec()) {
                 ROS_WARN_THROTTLE(1.0,
                                   "[BaslerStereoDriver]: tags coordinates timestamps are too far away from each other: %f",
                                   std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()));
@@ -303,7 +327,27 @@ namespace basler_stereo_driver {
         ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver]: \n\t\t\tMSE == %lf\n\t\t\tMAE == %lf",
                           MSE_res / 12.0,
                           MAE_res / 12.0);
+
+        // calculate reprojection error
+//        if (m_handler_imleft.newMsg() or m_handler_imright.newMsg()) {
+//            ROS_INFO_THROTTLE(1.0, "[BaslerStereoDriver]: error searching");
+//            auto cv_image_left = cv_bridge::toCvCopy(m_handler_imleft.getMsg(), "bgr8").get()->image;
+//            auto cv_image_right = cv_bridge::toCvCopy(m_handler_imright.getMsg(), "bgr8").get()->image;
+//            {
+//                std::scoped_lock lc{m_mut_pose_fright, m_mut_pose_fleft};
+//                for (auto &p: m_left_tag_poses) {
+//                    cv::Point3d pt_cv{p.x, p.y, p.z};
+//                    auto uv = m_camera_left.project3dToPixel(pt_cv);
+//                    cv::circle(cv_image_left, uv, 3, generate_random_color(), 3);
+//                }
+//            }
+//            m_pub_im_epileft.publish(cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image_left).toImageMsg());
+//            m_pub_im_epiright.publish(cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image_right).toImageMsg());
+//        } else {
+//            ROS_WARN_THROTTLE(1.0, "[BaslerStereoDriver]: no images for error searching");
+//        }
     }
+
 
     [[maybe_unused]] void draw_epipolar_line(cv::Mat &img,
                                              std::vector<cv::Point3f> &line,
@@ -311,17 +355,10 @@ namespace basler_stereo_driver {
         // source https://docs.opencv.org/3.4/da/de9/tutorial_py_epipolar_geometry.html
 //        auto h = img.size[0]; // r
         auto w = img.size[1]; // c
-        std::random_device rd;
-        std::mt19937 generator(rd());
-        std::uniform_int_distribution<uint8_t> distribution{0, 255};
         for (size_t i = 0; i < line.size(); ++i) {
 //        for (size_t i = 0; i < 100; i += 20) {
             // randomly generate line color
-            const int r = distribution(generator);
-            const int g = distribution(generator);
-            const int b = distribution(generator);
-
-            auto color = cv::Scalar(b, g, r);
+            auto color = generate_random_color();
             auto x0 = .0f;
             auto x1 = static_cast<double>(w);
 
@@ -343,13 +380,12 @@ namespace basler_stereo_driver {
     void BaslerStereoDriver::m_tim_cbk_corresp([[maybe_unused]] const ros::TimerEvent &ev) {
         if (not m_is_initialized) return;
 
-        if (m_imleft_handler.newMsg() and m_imright_handler.newMsg()) {
+        if (m_handler_imleft.newMsg() and m_handler_imright.newMsg()) {
             ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver]: looking for F");
 
             auto RL = m_transformer.getTransform(m_name_CR,
                                                  m_name_CL,
                                                  ros::Time::now());
-
             // m_F will be essential matrix here
             cv::eigen2cv(static_cast<Eigen::Matrix3d>(-sqs(RL->getTransformEigen().translation().matrix()) *
                                                       RL->getTransformEigen().rotation().matrix()),
@@ -357,8 +393,8 @@ namespace basler_stereo_driver {
             // now let's make it fundamental
             m_F = m_K_CR.inv().t() * m_F * m_K_CL.inv();
             ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver]: looking for correspondences");
-            auto cv_image_left = cv_bridge::toCvCopy(m_imleft_handler.getMsg(), "bgr8").get()->image;
-            auto cv_image_right = cv_bridge::toCvCopy(m_imright_handler.getMsg(), "bgr8").get()->image;
+            auto cv_image_left = cv_bridge::toCvCopy(m_handler_imleft.getMsg(), "bgr8").get()->image;
+            auto cv_image_right = cv_bridge::toCvCopy(m_handler_imright.getMsg(), "bgr8").get()->image;
             cv::Mat im_gray_left, im_gray_right;
             cv::cvtColor(cv_image_left, im_gray_left, cv::COLOR_BGR2GRAY);
             cv::cvtColor(cv_image_right, im_gray_right, cv::COLOR_BGR2GRAY);
@@ -377,13 +413,17 @@ namespace basler_stereo_driver {
             detector->detectAndCompute(im_gray_left, cv::Mat(), keypoints1, descriptor1);
             detector->detectAndCompute(im_gray_right, cv::Mat(), keypoints2, descriptor2);
 
+            if (keypoints1.size() < 5 or keypoints2.size() < 5) {
+                ROS_WARN_THROTTLE(1.0, "[BaslerStereoDriver]: no keypoints visible");
+                return;
+            }
             cv::KeyPoint::convert(keypoints1, keypoints1_p);
             cv::KeyPoint::convert(keypoints2, keypoints2_p);
-            auto H = cv::findHomography(keypoints1_p, keypoints2_p, cv::RANSAC, 3.0, mask1, 10000);
-            cv::Mat dst;
+
+//            auto H = cv::findHomography(keypoints1_p, keypoints2_p, cv::RANSAC, 2.0, mask1, 10000);
             keypoints1_p.clear();
             keypoints2_p.clear();
-            cv::warpPerspective(im_gray_left, dst, H, im_gray_left.size() * 2);
+
             std::vector<int> idxs_nonz;
             for (size_t i = 0; i < mask1.size(); ++i) {
                 if (mask1[i] == 0) continue;
@@ -402,7 +442,17 @@ namespace basler_stereo_driver {
 
             cv::Mat im_matches;
 
-            cv::drawMatches(cv_image_left, keypoints1, cv_image_right, keypoints2, matches, im_matches);
+            cv::drawMatches(cv_image_left,
+                            keypoints1,
+                            cv_image_right,
+                            keypoints2,
+                            matches,
+                            im_matches,
+                            cv::Scalar::all(-1),
+                            cv::Scalar::all(-1),
+                            std::vector<char>(),
+                            cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+
             m_pub_im_corresp.publish(cv_bridge::CvImage(std_msgs::Header(), "bgr8", im_matches).toImageMsg());
             // draw epipolar lines
             draw_epipolar_line(cv_image_left, lines2, keypoints1_p);

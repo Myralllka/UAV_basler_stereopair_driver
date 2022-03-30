@@ -9,29 +9,30 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_compile_options(-Wall -Wextra -pedantic -Werror -Werror=vla)
 
 find_package(catkin REQUIRED COMPONENTS
-  roscpp
-  std_msgs
-  mrs_lib
-  nav_msgs
-  apriltag_ros
-  geometry_msgs
-)
+        roscpp
+        std_msgs
+        mrs_lib
+        nav_msgs
+        apriltag_ros
+        geometry_msgs
+        image_geometry
+        )
 
 find_package(OpenCV REQUIRED)
 
 catkin_package(
-  INCLUDE_DIRS include
-  LIBRARIES 
-  CATKIN_DEPENDS roscpp mrs_lib geometry_msgs
+        INCLUDE_DIRS include
+        LIBRARIES
+        CATKIN_DEPENDS roscpp mrs_lib geometry_msgs
 )
 
 catkin_install_python(PROGRAMS scripts/pair_calibration_node.py
         DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)
+        )
 
 include_directories(include
-  ${catkin_INCLUDE_DIRS}
-)
+        ${catkin_INCLUDE_DIRS}
+        )
 
 add_library(${FILESNAME} src/${FILESNAME}.cpp)
 
