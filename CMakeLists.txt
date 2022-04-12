@@ -10,20 +10,33 @@ add_compile_options(-Wall -Wextra -pedantic -Werror -Werror=vla)
 
 find_package(catkin REQUIRED COMPONENTS
         roscpp
+        rospy
         std_msgs
         mrs_lib
         nav_msgs
         apriltag_ros
         geometry_msgs
         image_geometry
+        message_generation
         )
 
 find_package(OpenCV REQUIRED)
 
+add_message_files(
+        FILES
+        ImageMultiview.msg
+)
+
+generate_messages(
+        DEPENDENCIES
+        std_msgs
+        sensor_msgs
+)
+
 catkin_package(
         INCLUDE_DIRS include
         LIBRARIES
-        CATKIN_DEPENDS roscpp mrs_lib geometry_msgs
+        CATKIN_DEPENDS message_runtime roscpp mrs_lib geometry_msgs
 )
 
 catkin_install_python(PROGRAMS scripts/pair_calibration_node.py

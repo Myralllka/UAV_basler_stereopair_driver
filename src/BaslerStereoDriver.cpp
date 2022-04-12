@@ -110,6 +110,9 @@ namespace basler_stereo_driver {
             m_camera_right.fromCameraInfo(m_handler_camrightinfo.getMsg());
             m_camera_left.fromCameraInfo(m_handler_camleftinfo.getMsg());
         }
+        m_tim_collect_images = nh.createTimer(ros::Duration(0.00001),
+                                              &BaslerStereoDriver::m_tim_cbk_collect_images,
+                                              this);
         m_tim_fleft_pose = nh.createTimer(ros::Duration(0.0001),
                                           &BaslerStereoDriver::m_tim_cbk_fleft_pose,
                                           this);
@@ -167,6 +170,51 @@ namespace basler_stereo_driver {
     }
 
 // | --------------------- timer callbacks -------------------- |
+
+    void BaslerStereoDriver::m_tim_cbk_collect_images([[maybe_unused]] const ros::TimerEvent &ev) {
+        // collect images from almost the same timestamp and publish them as one image
+        // I made it because it was so complicated to keep tracking of all image pairs
+
+        if (not m_is_initialized) return;
+        if (m_handler_imleft.newMsg() and m_handler_imright.newMsg()) {
+            imleft = m_handler_imleft.getMsg();
+            imright = m_handler_imright.getMsg();
+            auto time_diff = std::abs(imleft->header.stamp.toSec() - imright->header.stamp.toSec());
+            if (time_diff > ros::Duration(0.1).toSec()) {
+                ROS_WARN_THROTTLE(1.0,
+                                  "[BaslerStereoDriver]: impair: images coordinates timestamps are too far away from each other: %f",
+                                  std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()));
+                return;
+            }
+            ROS_INFO_THROTTLE(1.0, "[BaslerStereoDriver]: impair: images timestamps are okay");
+        } else {
+            ROS_WARN_THROTTLE(1.0,
+                              "[BaslerStereoDriver]: impair: nonew images");
+            return;
+        }
+
+        m_impair.header.stamp = imright->header.stamp;
+        m_impair.header.frame_id = imright->header.frame_id;
+
+        m_impair.fleft.header = imleft->header;
+        m_impair.fleft.is_bigendian = imleft->is_bigendian;
+        m_impair.fleft.encoding = imleft->encoding;
+        m_impair.fleft.width = imleft->width;
+        m_impair.fleft.height = imleft->height;
+        m_impair.fleft.step = imleft->step;
+        m_impair.fleft.data = imleft->data;
+
+        m_impair.fright.header = imright->header;
+        m_impair.fright.is_bigendian = imright->is_bigendian;
+        m_impair.fright.encoding = imright->encoding;
+        m_impair.fright.width = imright->width;
+        m_impair.fright.height = imright->height;
+        m_impair.fright.step = imright->step;
+        m_impair.fright.data = imright->data;
+
+        ROS_INFO_THROTTLE(1.0, "[BaslerStereoDriver]: impair: impair updated");
+
+    }
 
     void BaslerStereoDriver::m_tim_cbk_fleft_pose([[maybe_unused]] const ros::TimerEvent &ev) {
         // publish left camera pose (when camera pair is already calibrated)
@@ -287,16 +335,6 @@ namespace basler_stereo_driver {
                           T_BL_result.header.stamp.nsec);
     }
 
-    [[maybe_unused]] cv::Scalar generate_random_color() {
-        std::random_device rd;
-        std::mt19937 generator(rd());
-        std::uniform_int_distribution<uint8_t> distribution{0, 255};
-
-        uint8_t r = distribution(generator);
-        uint8_t g = distribution(generator);
-        uint8_t b = distribution(generator);
-        return cv::Scalar(b, g, r);
-    }
 
     void BaslerStereoDriver::m_tim_cbk_tags_errors([[maybe_unused]] const ros::TimerEvent &ev) {
         // timer callback to calculate error in euclidean 3d space between tags
@@ -348,34 +386,6 @@ namespace basler_stereo_driver {
 //        }
     }
 
-
-    [[maybe_unused]] void draw_epipolar_line(cv::Mat &img,
-                                             std::vector<cv::Point3f> &line,
-                                             const std::vector<cv::Point2f> &pts) {
-        // source https://docs.opencv.org/3.4/da/de9/tutorial_py_epipolar_geometry.html
-//        auto h = img.size[0]; // r
-        auto w = img.size[1]; // c
-        for (size_t i = 0; i < line.size(); ++i) {
-//        for (size_t i = 0; i < 100; i += 20) {
-            // randomly generate line color
-            auto color = generate_random_color();
-            auto x0 = .0f;
-            auto x1 = static_cast<double>(w);
-
-            double l0 = line[i].x;
-            double l1 = line[i].y;
-            double l2 = line[i].z;
-
-            double y0 = -l2 / l1;
-            double y1 = -(l2 + l0 * w) / l1;
-
-            auto p1 = cv::Point{static_cast<int>(std::round(x0)), static_cast<int>(std::ceil(y0))};
-            auto p2 = cv::Point{static_cast<int>(std::round(x1)), static_cast<int>(std::ceil(y1))};
-
-            cv::line(img, p1, p2, color, 3);
-            cv::circle(img, pts[i], 2, color, 5);
-        }
-    }
 
     void BaslerStereoDriver::m_tim_cbk_corresp([[maybe_unused]] const ros::TimerEvent &ev) {
         if (not m_is_initialized) return;
@@ -466,19 +476,6 @@ namespace basler_stereo_driver {
     }
 // | -------------------- other functions ------------------- |
 
-    Eigen::Affine3d BaslerStereoDriver::m_interpolate_pose(const Eigen::Affine3d &input_avg,
-                                                           const Eigen::Affine3d &other) {
-        // apply simple filter
-        using quat_t = Eigen::Quaterniond;
-
-        auto result_translation = (input_avg.translation() * m_weight + other.translation()) / (m_weight + 1);
-        auto result_rotation = quat_t{input_avg.rotation()}.slerp(1.0 / (static_cast<double>(m_weight) + 1),
-                                                                  quat_t{other.rotation()});
-        auto res = Eigen::Affine3d::Identity();
-        res.translate(result_translation).rotate(result_rotation);
-        return res;
-    }
-
     std::optional<std::vector<geometry_msgs::Point>>
     BaslerStereoDriver::m_tag_detection_cbk_body(const std::string &camera_name,
                                                  const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg) {
@@ -516,6 +513,59 @@ namespace basler_stereo_driver {
         return result;
     }
 
+    // ===================== UTILS =====================
+
+    [[maybe_unused]] cv::Scalar BaslerStereoDriver::generate_random_color() {
+        std::random_device rd;
+        std::mt19937 generator(rd());
+        std::uniform_int_distribution<uint8_t> distribution{0, 255};
+
+        uint8_t r = distribution(generator);
+        uint8_t g = distribution(generator);
+        uint8_t b = distribution(generator);
+        return cv::Scalar(b, g, r);
+    }
+
+    [[maybe_unused]] void BaslerStereoDriver::draw_epipolar_line(cv::Mat &img,
+                                                                 std::vector<cv::Point3f> &line,
+                                                                 const std::vector<cv::Point2f> &pts) {
+        // source https://docs.opencv.org/3.4/da/de9/tutorial_py_epipolar_geometry.html
+//        auto h = img.size[0]; // r
+        auto w = img.size[1]; // c
+        for (size_t i = 0; i < line.size(); ++i) {
+//        for (size_t i = 0; i < 100; i += 20) {
+            // randomly generate line color
+            auto color = generate_random_color();
+            auto x0 = .0f;
+            auto x1 = static_cast<double>(w);
+
+            double l0 = line[i].x;
+            double l1 = line[i].y;
+            double l2 = line[i].z;
+
+            double y0 = -l2 / l1;
+            double y1 = -(l2 + l0 * w) / l1;
+
+            auto p1 = cv::Point{static_cast<int>(std::round(x0)), static_cast<int>(std::ceil(y0))};
+            auto p2 = cv::Point{static_cast<int>(std::round(x1)), static_cast<int>(std::ceil(y1))};
+
+            cv::line(img, p1, p2, color, 3);
+            cv::circle(img, pts[i], 2, color, 5);
+        }
+    }
+
+    Eigen::Affine3d BaslerStereoDriver::m_interpolate_pose(const Eigen::Affine3d &input_avg,
+                                                           const Eigen::Affine3d &other) {
+        // apply simple filter
+        using quat_t = Eigen::Quaterniond;
+
+        auto result_translation = (input_avg.translation() * m_weight + other.translation()) / (m_weight + 1);
+        auto result_rotation = quat_t{input_avg.rotation()}.slerp(1.0 / (static_cast<double>(m_weight) + 1),
+                                                                  quat_t{other.rotation()});
+        auto res = Eigen::Affine3d::Identity();
+        res.translate(result_translation).rotate(result_rotation);
+        return res;
+    }
 }  // namespace basler_stereo_driver
 
 /* every nodelet must export its class as nodelet plugin */

@@ -47,6 +47,7 @@
 #include <opencv2/core/eigen.hpp>
 
 /* user includes */
+#include "basler_stereopair_driver/ImageMultiview.h"
 
 //}
 
@@ -72,6 +73,7 @@ namespace basler_stereo_driver {
         /* flags */
         bool m_is_initialized = false;
         bool m_is_calibrated = false;
+
         /* ros parameters */
         std::string m_uav_name;
         float m_time_transformation{0.001};
@@ -86,6 +88,11 @@ namespace basler_stereo_driver {
         std::string m_name_CL;
         std::string m_name_CR;
 
+        /* images for image pair */
+        sensor_msgs::Image::ConstPtr imleft;
+        sensor_msgs::Image::ConstPtr imright;
+        basler_stereopair_driver::ImageMultiview m_impair{};
+
         /* opencv parameters */
         cv::Mat descriptor1, descriptor2;
         std::vector<cv::KeyPoint> keypoints1, keypoints2;
@@ -98,7 +105,6 @@ namespace basler_stereo_driver {
         std::vector<cv::Vec3f> epipolar_lines;
 
         /* tag detection callback data */
-
         std::vector<geometry_msgs::Point> m_left_tag_poses;
         ros::Time m_timestamp_fleft{0};
         std::mutex m_mut_pose_fleft;
@@ -132,11 +138,17 @@ namespace basler_stereo_driver {
         void m_cbk_complete_save_calibration(std_msgs::Bool flag);
 
         // | --------------------- timer callbacks -------------------- |
+        // collect images and publish them together
+
+        ros::Timer m_tim_collect_images;
+
         ros::Timer m_tim_find_BL;
         ros::Timer m_tim_tags_coordinates;
         ros::Timer m_tim_fleft_pose;
         ros::Timer m_tim_mse;
         ros::Timer m_tim_corresp;
+
+        void m_tim_cbk_collect_images(const ros::TimerEvent &ev);
 
         void m_tim_cbk_find_BL(const ros::TimerEvent &ev);
 
@@ -152,6 +164,9 @@ namespace basler_stereo_driver {
         ros::Publisher m_pub_im_corresp;
         ros::Publisher m_pub_im_epiright;
         ros::Publisher m_pub_im_epileft;
+
+        ros::Publisher m_pub_imcollection;
+
         // | ----------------------- subscribers ---------------------- |
         ros::Subscriber m_sub_camera_fleft;
         ros::Subscriber m_sub_camera_fright;
@@ -175,6 +190,13 @@ namespace basler_stereo_driver {
 
         Eigen::Affine3d m_interpolate_pose(const Eigen::Affine3d &input_avg,
                                            const Eigen::Affine3d &other);
+        // ------------------------ UTILS -----------------------------
+
+        [[maybe_unused]] void draw_epipolar_line(cv::Mat &img,
+                                                 std::vector<cv::Point3f> &line,
+                                                 const std::vector<cv::Point2f> &pts);
+
+        [[maybe_unused]] cv::Scalar generate_random_color();
     };
 //}
 
