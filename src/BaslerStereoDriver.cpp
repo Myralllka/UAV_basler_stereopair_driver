@@ -57,8 +57,8 @@ namespace basler_stereo_driver {
         // | ---------------- subscribers initialize ------------------ |
 
         // | --------------------- tf transformer --------------------- |
-        m_transformer = mrs_lib::Transformer("basler_stereo_driver",
-                                             m_uav_name);
+        m_transformer = mrs_lib::Transformer("basler_stereo_driver");
+        m_transformer.setDefaultPrefix(m_uav_name);
 
         // | -------------------- initialize timers ------------------- |
 
@@ -273,6 +273,7 @@ namespace basler_stereo_driver {
         // B - base
         // L - left camera optical pose
         // R - right camera optical pose
+        // C - camera
 
         if (not m_is_initialized) return;
 
@@ -296,9 +297,11 @@ namespace basler_stereo_driver {
 
         if (T_BR.has_value() and T_BL_original.has_value()) {
             std::lock_guard lock{m_mut_RL_correction};
-            const auto T_RL = T_BL_original->getTransformEigen() * T_BR->inverse().getTransformEigen();
+            auto t_BR_eig = Eigen::Affine3d{tf2::transformToEigen(T_BR->transform)};
+            const auto T_RL = Eigen::Affine3d{tf2::transformToEigen(T_BL_original->transform)} *
+                              t_BR_eig.inverse();
             const auto T_RL_corrected = m_RL_error.inverse() * T_RL;
-            auto T_BL_corrected = T_RL_corrected * T_BR->getTransformEigen();
+            auto T_BL_corrected = T_RL_corrected * t_BR_eig;
             // make a new frame - pose estimation
             std::lock_guard l{m_mut_filtered_CL_pose};
             if (not m_weight) {
@@ -320,7 +323,10 @@ namespace basler_stereo_driver {
                                                     "basler_left_optical/tag_" + std::to_string(i));
 
             if (L2tag.has_value()) {
-                auto transform = L2tag.value().inverse().getTransform();
+//                auto transform = L2tag.value().inverse().getTransform();
+                auto transform = geometry_msgs::TransformStamped{};
+                transform.transform = tf2::eigenToTransform(
+                        Eigen::Affine3d{tf2::transformToEigen(L2tag->transform)}.inverse()).transform;
                 transform.header.stamp = ros::Time::now();
                 transform.header.frame_id = m_name_CL + "corrected";
                 transform.child_frame_id = m_uav_name + "/tag_modified" + std::to_string(i);
@@ -358,8 +364,9 @@ namespace basler_stereo_driver {
             auto Ltag2Rtag = m_transformer.getTransform("basler_right_optical/tag_" + std::to_string(i),
                                                         "basler_left_optical/tag_" + std::to_string(i));
             if (Ltag2Rtag.has_value()) {
-                MSE_res += std::pow(Ltag2Rtag.value().getTransformEigen().translation().norm(), 2);
-                MAE_res += std::abs(Ltag2Rtag.value().getTransformEigen().translation().norm());
+                auto l2r_norm = Eigen::Affine3d{tf2::transformToEigen(Ltag2Rtag->transform)}.translation().norm();
+                MSE_res += std::pow(l2r_norm, 2);
+                MAE_res += l2r_norm;
             }
         }
         ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver]: \n\t\t\tMSE == %lf\n\t\t\tMAE == %lf",
@@ -396,10 +403,13 @@ namespace basler_stereo_driver {
             auto RL = m_transformer.getTransform(m_name_CR,
                                                  m_name_CL,
                                                  ros::Time::now());
+
             // m_F will be essential matrix here
-            cv::eigen2cv(static_cast<Eigen::Matrix3d>(-sqs(RL->getTransformEigen().translation().matrix()) *
-                                                      RL->getTransformEigen().rotation().matrix()),
-                         m_F);
+            Eigen::Matrix3d t12 = -sqs(Eigen::Affine3d{tf2::transformToEigen(RL->transform)}.translation().matrix());
+            Eigen::Matrix3d rrr = Eigen::Affine3d{tf2::transformToEigen(RL->transform)}.rotation().matrix();
+
+            cv::eigen2cv(static_cast<Eigen::Matrix3d>(t12 * rrr), m_F);
+
             // now let's make it fundamental
             m_F = m_K_CR.inv().t() * m_F * m_K_CL.inv();
             ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver]: looking for correspondences");
@@ -496,7 +506,7 @@ namespace basler_stereo_driver {
         }
         std::vector<geometry_msgs::PoseWithCovarianceStamped> poses_base_frame;
         for (const apriltag_ros::AprilTagDetection &el: msg_sorted) {
-            auto pose_cam_frame = m_transformer.transformSingle(m_name_base, el.pose);
+            auto pose_cam_frame = m_transformer.transformSingle(el.pose, m_name_base);
             if (pose_cam_frame.has_value()) {
                 poses_base_frame.push_back(pose_cam_frame.value());
             } else {
