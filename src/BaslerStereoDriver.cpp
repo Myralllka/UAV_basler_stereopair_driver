@@ -53,7 +53,7 @@ namespace basler_stereo_driver {
         m_pub_im_corresp = nh.advertise<sensor_msgs::Image>("im_corresp", 1);
         m_pub_im_epileft = nh.advertise<sensor_msgs::Image>("im_epiright", 1);
         m_pub_im_epiright = nh.advertise<sensor_msgs::Image>("im_epileft", 1);
-
+        m_pub_multiview = nh.advertise<mrs_msgs::ImageLabeledArray>("multiview_labeled", 1);
         // | ---------------- subscribers initialize ------------------ |
 
         // | --------------------- tf transformer --------------------- |
@@ -61,6 +61,8 @@ namespace basler_stereo_driver {
         m_transformer.setDefaultPrefix(m_uav_name);
 
         // | -------------------- initialize timers ------------------- |
+        // also there is a difference between calibrated and non-calibrated mode
+        // so different subscribers are also initialized here
 
         ROS_ASSERT("[BaslerStereoDriver] timers initialisation");
 
@@ -183,35 +185,50 @@ namespace basler_stereo_driver {
             if (time_diff > ros::Duration(0.1).toSec()) {
                 ROS_WARN_THROTTLE(1.0,
                                   "[BaslerStereoDriver]: impair: images coordinates timestamps are too far away from each other: %f",
-                                  std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()));
+                                  time_diff);
                 return;
             }
             ROS_INFO_THROTTLE(1.0, "[BaslerStereoDriver]: impair: images timestamps are okay");
         } else {
             ROS_WARN_THROTTLE(1.0,
-                              "[BaslerStereoDriver]: impair: nonew images");
+                              "[BaslerStereoDriver]: impair: no new images");
             return;
         }
+//        m_impair = boost::make_shared<mrs_msgs::ImageLabeledArray>();
+        m_impair->header.stamp = imright->header.stamp;
+        m_impair->header.frame_id = imright->header.frame_id;
 
-        m_impair.header.stamp = imright->header.stamp;
-        m_impair.header.frame_id = imright->header.frame_id;
+        mrs_msgs::ImageLabeled im_labeled_fright{};
+        mrs_msgs::ImageLabeled im_labeled_fleft{};
 
-        m_impair.fleft.header = imleft->header;
-        m_impair.fleft.is_bigendian = imleft->is_bigendian;
-        m_impair.fleft.encoding = imleft->encoding;
-        m_impair.fleft.width = imleft->width;
-        m_impair.fleft.height = imleft->height;
-        m_impair.fleft.step = imleft->step;
-        m_impair.fleft.data = imleft->data;
+        im_labeled_fleft.label = "fleft";
+        im_labeled_fright.label = "fright";
 
-        m_impair.fright.header = imright->header;
-        m_impair.fright.is_bigendian = imright->is_bigendian;
-        m_impair.fright.encoding = imright->encoding;
-        m_impair.fright.width = imright->width;
-        m_impair.fright.height = imright->height;
-        m_impair.fright.step = imright->step;
-        m_impair.fright.data = imright->data;
+        im_labeled_fleft.img.header.stamp = imleft->header.stamp;
+        im_labeled_fleft.img.header.frame_id = imleft->header.frame_id;
+        im_labeled_fleft.img.data = imleft->data;
+        im_labeled_fleft.img.step = imleft->step;
+        im_labeled_fleft.img.width = imleft->width;
+        im_labeled_fleft.img.height = imleft->height;
+        im_labeled_fleft.img.encoding = imleft->encoding;
+        im_labeled_fleft.img.is_bigendian = imleft->is_bigendian;
 
+        im_labeled_fright.img.header.stamp = imright->header.stamp;
+        im_labeled_fright.img.header.frame_id = imright->header.frame_id;
+        im_labeled_fright.img.data = imright->data;
+        im_labeled_fright.img.step = imright->step;
+        im_labeled_fright.img.width = imright->width;
+        im_labeled_fright.img.height = imright->height;
+        im_labeled_fright.img.encoding = imright->encoding;
+        im_labeled_fright.img.is_bigendian = imright->is_bigendian;
+
+        m_impair->header.stamp = ros::Time::now();
+        m_impair->header.frame_id = m_name_base;
+
+        m_impair->imgs_labeled.push_back(im_labeled_fright);
+        m_impair->imgs_labeled.push_back(im_labeled_fleft);
+
+        m_pub_multiview.publish(m_impair);
         ROS_INFO_THROTTLE(1.0, "[BaslerStereoDriver]: impair: impair updated");
 
     }
@@ -401,8 +418,7 @@ namespace basler_stereo_driver {
             ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver]: looking for F");
 
             auto RL = m_transformer.getTransform(m_name_CR,
-                                                 m_name_CL,
-                                                 ros::Time::now());
+                                                 m_name_CL);
 
             // m_F will be essential matrix here
             Eigen::Matrix3d t12 = -sqs(Eigen::Affine3d{tf2::transformToEigen(RL->transform)}.translation().matrix());

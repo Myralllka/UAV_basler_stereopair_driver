@@ -22,6 +22,8 @@
 #include <mrs_lib/transformer.h>
 #include <mrs_lib/transform_broadcaster.h>
 #include <mrs_lib/subscribe_handler.h>
+#include <mrs_msgs/ImageLabeled.h>
+#include <mrs_msgs/ImageLabeledArray.h>
 
 /* other important includes */
 #include <nav_msgs/Odometry.h>
@@ -38,7 +40,6 @@
 /* opencv */
 #include <cv_bridge/cv_bridge.h>
 #include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/calib3d.hpp>
@@ -47,7 +48,6 @@
 #include <opencv2/core/eigen.hpp>
 
 /* user includes */
-#include "basler_stereopair_driver/ImageMultiview.h"
 
 //}
 
@@ -55,7 +55,7 @@
 // source: https://github.com/ethz-asl/ethzasl_msf/blob/5d916120c3e4df5b1ea136c2516c6ad1e3f9bf78/msf_core/include/msf_core/eigen_utils.h#L28
 template<class Derived>
 inline Eigen::Matrix<typename Derived::Scalar, 3, 3> sqs(const Eigen::MatrixBase<Derived> &vec) {
-    EIGEN_STATIC_ASSERT_VECTOR_SPECIFIC_SIZE(Derived, 3);
+    EIGEN_STATIC_ASSERT_VECTOR_SPECIFIC_SIZE(Derived, 3)
     return (Eigen::Matrix<typename Derived::Scalar, 3, 3>() << 0.0, -vec[2], vec[1],
             vec[2], 0.0, -vec[0], -vec[1], vec[0], 0.0).finished();
 }
@@ -91,8 +91,8 @@ namespace basler_stereo_driver {
         /* images for image pair */
         sensor_msgs::Image::ConstPtr imleft;
         sensor_msgs::Image::ConstPtr imright;
-        basler_stereopair_driver::ImageMultiview m_impair{};
 
+        mrs_msgs::ImageLabeledArray::Ptr m_impair{};
         /* opencv parameters */
         cv::Mat descriptor1, descriptor2;
         std::vector<cv::KeyPoint> keypoints1, keypoints2;
@@ -165,7 +165,7 @@ namespace basler_stereo_driver {
         ros::Publisher m_pub_im_epiright;
         ros::Publisher m_pub_im_epileft;
 
-        ros::Publisher m_pub_imcollection;
+        ros::Publisher m_pub_multiview;
 
         // | ----------------------- subscribers ---------------------- |
         ros::Subscriber m_sub_camera_fleft;

@@ -13,30 +13,20 @@ find_package(catkin REQUIRED COMPONENTS
         rospy
         std_msgs
         mrs_lib
+        mrs_msgs
         nav_msgs
         apriltag_ros
         geometry_msgs
         image_geometry
-        message_generation
         )
 
 find_package(OpenCV REQUIRED)
 
-add_message_files(
-        FILES
-        ImageMultiview.msg
-)
-
-generate_messages(
-        DEPENDENCIES
-        std_msgs
-        sensor_msgs
-)
 
 catkin_package(
         INCLUDE_DIRS include
         LIBRARIES
-        CATKIN_DEPENDS message_runtime roscpp mrs_lib geometry_msgs
+        CATKIN_DEPENDS roscpp mrs_lib geometry_msgs mrs_msgs
 )
 
 catkin_install_python(PROGRAMS scripts/pair_calibration_node.py
