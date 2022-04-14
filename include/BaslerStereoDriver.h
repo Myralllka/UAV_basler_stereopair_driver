@@ -94,7 +94,7 @@ namespace basler_stereo_driver {
         sensor_msgs::Image::ConstPtr imleft;
         sensor_msgs::Image::ConstPtr imright;
 
-        mrs_msgs::ImageLabeledArray::Ptr m_impair{};
+        mrs_msgs::ImageLabeledArray::Ptr m_impair;
         /* opencv parameters */
         cv::Mat descriptor1, descriptor2;
         std::vector<cv::KeyPoint> keypoints1, keypoints2;
@@ -148,7 +148,7 @@ namespace basler_stereo_driver {
         ros::Timer m_tim_tags_coordinates;
         ros::Timer m_tim_fleft_pose;
         ros::Timer m_tim_mse;
-        ros::Timer m_tim_corresp;
+//        ros::Timer m_tim_corresp;
 
         void m_tim_cbk_collect_images(const ros::TimerEvent &ev);
 
@@ -160,12 +160,12 @@ namespace basler_stereo_driver {
 
         void m_tim_cbk_tags_errors(const ros::TimerEvent &ev);
 
-        void m_tim_cbk_corresp(const ros::TimerEvent &ev);
+//        void m_tim_cbk_corresp(const ros::TimerEvent &ev);
 
         // | ----------------------- publishers ----------------------- |
-        ros::Publisher m_pub_im_corresp;
-        ros::Publisher m_pub_im_epiright;
-        ros::Publisher m_pub_im_epileft;
+//        ros::Publisher m_pub_im_corresp;
+//        ros::Publisher m_pub_im_epiright;
+//        ros::Publisher m_pub_im_epileft;
 
         ros::Publisher m_pub_multiview;
 
