@@ -70,6 +70,8 @@ namespace basler_stereo_driver {
         void onInit() override;
 
     private:
+        // used for ros log msgs
+        const std::string NODENAME{"BaslerStereoDriver"};
         /* flags */
         bool m_is_initialized = false;
         bool m_is_calibrated = false;

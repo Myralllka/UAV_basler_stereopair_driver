@@ -20,7 +20,7 @@ namespace basler_stereo_driver {
 
         // | ------------------- load ros parameters ------------------ |
         /* (mrs_lib implementation checks whether the parameter was loaded or not) */
-        mrs_lib::ParamLoader pl(nh, "BaslerStereoDriver");
+        mrs_lib::ParamLoader pl(nh, NODENAME);
 
         pl.loadParam("UAV_NAME", m_uav_name);
         pl.loadParam("camera_poses_filename", m_config_filename);
@@ -42,10 +42,10 @@ namespace basler_stereo_driver {
         m_fleft_pose.translate(fleft_translation).rotate(Eigen::Quaterniond{fleft_rotation});
 
         if (!pl.loadedSuccessfully()) {
-            ROS_ERROR("[BaslerStereoDriver]: failed to load non-optional parameters!");
+            ROS_ERROR("[%s]: failed to load non-optional parameters!", NODENAME.c_str());
             ros::shutdown();
         } else {
-            ROS_INFO_ONCE("[BaslerStereoDriver]: loaded parameters");
+            ROS_INFO_ONCE("[%s]: loaded parameters", NODENAME.c_str());
         }
         // | ---------------- some data post-processing --------------- |
 
@@ -64,7 +64,7 @@ namespace basler_stereo_driver {
         // also there is a difference between calibrated and non-calibrated mode
         // so different subscribers are also initialized here
 
-        ROS_ASSERT("[BaslerStereoDriver] timers initialisation");
+        ROS_INFO_ONCE("[%s] timers initialisation", NODENAME.c_str());
 
         // If pair is calibrated - publish the pose as already calibrated parameter
         if (not m_is_calibrated) {
@@ -88,7 +88,7 @@ namespace basler_stereo_driver {
                                            this);
             // for epipolar lines drawing I'll use subscriber handler
             mrs_lib::SubscribeHandlerOptions shopt{nh};
-            shopt.node_name = "BaslerStereoDriver";
+            shopt.node_name = NODENAME;
             shopt.threadsafe = true;
             shopt.no_message_timeout = ros::Duration(1.0);
             mrs_lib::construct_object(m_handler_imleft,
@@ -107,7 +107,7 @@ namespace basler_stereo_driver {
                                       "/" + m_uav_name + "/basler_right/camera_info");
             // initialize cameras with pinhole modeller
             while (not(m_handler_camleftinfo.newMsg() and m_handler_camrightinfo.newMsg())) {
-                ROS_WARN_THROTTLE(1.0, "[BaslerStereoDriver]: waiting for camera info messages");
+                ROS_WARN_THROTTLE(1.0, "[%s]: waiting for camera info messages", NODENAME.c_str());
             }
             m_camera_right.fromCameraInfo(m_handler_camrightinfo.getMsg());
             m_camera_left.fromCameraInfo(m_handler_camleftinfo.getMsg());
@@ -126,7 +126,7 @@ namespace basler_stereo_driver {
                                            1,
                                            &BaslerStereoDriver::m_cbk_tag_detection_fright,
                                            this);
-        ROS_INFO_ONCE("[BaslerStereoDriver]: initialized");
+        ROS_INFO_ONCE("[%s]: initialized", NODENAME.c_str());
         m_is_initialized = true;
     }
 //}
@@ -138,9 +138,9 @@ namespace basler_stereo_driver {
         if (res.has_value()) {
             m_right_tag_poses = res.value();
             m_timestamp_fright = msg->header.stamp;
-            ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver]: right camera tags detection cbk complete");
+            ROS_INFO_THROTTLE(2.0, "[%s]: right camera tags detection cbk complete", NODENAME.c_str());
         } else {
-            ROS_WARN_THROTTLE(2.0, "[BaslerStereoDriver]: right camera cnk not completed");
+            ROS_WARN_THROTTLE(2.0, "[%s]: right camera cnk not completed", NODENAME.c_str());
         }
     }
 
@@ -150,9 +150,9 @@ namespace basler_stereo_driver {
         if (res.has_value()) {
             m_left_tag_poses = res.value();
             m_timestamp_fleft = msg->header.stamp;
-            ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver]: left camera tags detection cbk complete");
+            ROS_INFO_THROTTLE(2.0, "[%s]: left camera tags detection cbk complete", NODENAME.c_str());
         } else {
-            ROS_WARN_THROTTLE(2.0, "[BasleStereoDriver]: left camera cnk not completed");
+            ROS_WARN_THROTTLE(2.0, "[%s]: left camera cnk not completed", NODENAME.c_str());
         }
     }
 
@@ -184,17 +184,17 @@ namespace basler_stereo_driver {
             auto time_diff = std::abs(imleft->header.stamp.toSec() - imright->header.stamp.toSec());
             if (time_diff > ros::Duration(0.1).toSec()) {
                 ROS_WARN_THROTTLE(1.0,
-                                  "[BaslerStereoDriver]: impair: images coordinates timestamps are too far away from each other: %f",
+                                  "[%s]: impair: images coordinates timestamps are too far away from each other: %f",
+                                  NODENAME.c_str(),
                                   time_diff);
                 return;
             }
-            ROS_INFO_THROTTLE(1.0, "[BaslerStereoDriver]: impair: images timestamps are okay");
+            ROS_INFO_THROTTLE(1.0, "[%s]: impair: images timestamps are okay", NODENAME.c_str());
         } else {
-            ROS_WARN_THROTTLE(1.0,
-                              "[BaslerStereoDriver]: impair: no new images");
+            ROS_WARN_THROTTLE(1.0, "[%s]: impair: no new images", NODENAME.c_str());
             return;
         }
-//        m_impair = boost::make_shared<mrs_msgs::ImageLabeledArray>();
+
         m_impair->header.stamp = imright->header.stamp;
         m_impair->header.frame_id = imright->header.frame_id;
 
@@ -229,7 +229,7 @@ namespace basler_stereo_driver {
         m_impair->imgs_labeled.push_back(im_labeled_fleft);
 
         m_pub_multiview.publish(m_impair);
-        ROS_INFO_THROTTLE(1.0, "[BaslerStereoDriver]: impair: impair updated");
+        ROS_INFO_THROTTLE(1.0, "[%s]: impair: impair updated", NODENAME.c_str());
 
     }
 
@@ -252,7 +252,8 @@ namespace basler_stereo_driver {
             if (m_right_tag_poses.empty() or m_left_tag_poses.empty()) return;
             if (std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()) > ros::Duration(0.2).toSec()) {
                 ROS_WARN_THROTTLE(1.0,
-                                  "[BaslerStereoDriver]: tags coordinates timestamps are too far away from each other: %f",
+                                  "[%s]: tags coordinates timestamps are too far away from each other: %f",
+                                  NODENAME.c_str(),
                                   std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()));
                 return;
             }
@@ -299,12 +300,13 @@ namespace basler_stereo_driver {
             if (m_right_tag_poses.empty() or m_left_tag_poses.empty()) return;
             if (std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()) > ros::Duration(0.2).toSec()) {
                 ROS_WARN_THROTTLE(1.0,
-                                  "[BaslerStereoDriver]: tags coordinates timestamps are too far away from each other: %f",
+                                  "[%s]: tags coordinates timestamps are too far away from each other: %f",
+                                  NODENAME.c_str(),
                                   std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()));
                 return;
             }
         }
-        ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver] transform RL publisher");
+        ROS_INFO_THROTTLE(2.0, "[%s] transform RL publisher", NODENAME.c_str());
 
         auto T_BR = m_transformer.getTransform(m_name_CR,
                                                m_name_base);
@@ -328,7 +330,7 @@ namespace basler_stereo_driver {
             T_BL_result = tf2::eigenToTransform(m_interpolate_pose(m_filtered_CL_pose, T_BL_corrected));
 
         } else {
-            ROS_ERROR_THROTTLE(2.0, "[BaslerStereoDriver] wrong transformation from L/R to base");
+            ROS_ERROR_THROTTLE(2.0, "[%s] wrong transformation from L/R to base", NODENAME.c_str());
         }
         T_BL_result.header.stamp = ev.current_real;
         T_BL_result.header.frame_id = m_name_base;
@@ -352,8 +354,9 @@ namespace basler_stereo_driver {
         }
 
         m_tbroadcaster.sendTransform(T_BL_result);
-        ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver] transform stamped sent from %s to %s time %u",
-                          T_BL_result.header.frame_id.c_str(),
+        ROS_INFO_THROTTLE(2.0, "[%s] transform stamped sent from %s to %s time %u",
+                          NODENAME.c_str()
+                                  T_BL_result.header.frame_id.c_str(),
                           T_BL_result.child_frame_id.c_str(),
                           T_BL_result.header.stamp.nsec);
     }
@@ -368,11 +371,12 @@ namespace basler_stereo_driver {
             if (m_right_tag_poses.empty() or m_left_tag_poses.empty()) return;
             if (std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()) > ros::Duration(0.1).toSec()) {
                 ROS_WARN_THROTTLE(1.0,
-                                  "[BaslerStereoDriver]: tags coordinates timestamps are too far away from each other: %f",
+                                  "[%s]: tags coordinates timestamps are too far away from each other: %f",
+                                  NODENAME.c_str(),
                                   std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()));
                 return;
             }
-            ROS_INFO_THROTTLE(1.0, "[BaslerStereoDriver]: tags timestamps are okay");
+            ROS_INFO_THROTTLE(1.0, "[%s]: tags timestamps are okay", NODENAME.c_str());
         }
         double MSE_res = 0;
         double MAE_res = 0;
@@ -386,7 +390,8 @@ namespace basler_stereo_driver {
                 MAE_res += l2r_norm;
             }
         }
-        ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver]: \n\t\t\tMSE == %lf\n\t\t\tMAE == %lf",
+        ROS_INFO_THROTTLE(2.0, "[%s]: \n\t\t\tMSE == %lf\n\t\t\tMAE == %lf",
+                          NODENAME.c_str(),
                           MSE_res / 12.0,
                           MAE_res / 12.0);
 
@@ -415,7 +420,7 @@ namespace basler_stereo_driver {
         if (not m_is_initialized) return;
 
         if (m_handler_imleft.newMsg() and m_handler_imright.newMsg()) {
-            ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver]: looking for F");
+            ROS_INFO_THROTTLE(2.0, "[%s]: looking for F", NODENAME.c_str());
 
             auto RL = m_transformer.getTransform(m_name_CR,
                                                  m_name_CL);
@@ -428,7 +433,7 @@ namespace basler_stereo_driver {
 
             // now let's make it fundamental
             m_F = m_K_CR.inv().t() * m_F * m_K_CL.inv();
-            ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver]: looking for correspondences");
+            ROS_INFO_THROTTLE(2.0, "[%s]: looking for correspondences", NODENAME.c_str());
             auto cv_image_left = cv_bridge::toCvCopy(m_handler_imleft.getMsg(), "bgr8").get()->image;
             auto cv_image_right = cv_bridge::toCvCopy(m_handler_imright.getMsg(), "bgr8").get()->image;
             cv::Mat im_gray_left, im_gray_right;
@@ -450,7 +455,7 @@ namespace basler_stereo_driver {
             detector->detectAndCompute(im_gray_right, cv::Mat(), keypoints2, descriptor2);
 
             if (keypoints1.size() < 5 or keypoints2.size() < 5) {
-                ROS_WARN_THROTTLE(1.0, "[BaslerStereoDriver]: no keypoints visible");
+                ROS_WARN_THROTTLE(1.0, "[%s]: no keypoints visible", NODENAME.c_str());
                 return;
             }
             cv::KeyPoint::convert(keypoints1, keypoints1_p);
@@ -497,7 +502,7 @@ namespace basler_stereo_driver {
             m_pub_im_epileft.publish(cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image_left).toImageMsg());
             m_pub_im_epiright.publish(cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image_right).toImageMsg());
         } else {
-            ROS_WARN_THROTTLE(2.0, "[BaslerStereoDriver]: No new images to search for correspondences");
+            ROS_WARN_THROTTLE(2.0, "[%s]: No new images to search for correspondences", NODENAME.c_str());
         }
     }
 // | -------------------- other functions ------------------- |
@@ -508,14 +513,17 @@ namespace basler_stereo_driver {
 
         if (not m_is_initialized) return std::nullopt;
         if (msg->detections.empty()) {
-            ROS_WARN_THROTTLE(2.0, "[BaslerStereoDriver]: no tags visible by %s camera", camera_name.c_str());
+            ROS_WARN_THROTTLE(2.0, "[%s]: no tags visible by %s camera",
+                              NODENAME.c_str(),
+                              camera_name.c_str());
             return std::nullopt;
         }
         auto msg_sorted = msg.get()->detections;
         std::sort(msg_sorted.begin(), msg_sorted.end() - 1, [](auto a, auto b) { return a.id < b.id; });
         msg_sorted.pop_back();
         if (msg_sorted.size() != 12) {
-            ROS_WARN_THROTTLE(1.0, "[BaslerStereoDriver]: %s camera: %zu out of 12 tags detected",
+            ROS_WARN_THROTTLE(1.0, "[%s]: %s camera: %zu out of 12 tags detected",
+                              NODENAME.c_str(),
                               camera_name.c_str(),
                               msg_sorted.size());
             return std::nullopt;
@@ -526,7 +534,8 @@ namespace basler_stereo_driver {
             if (pose_cam_frame.has_value()) {
                 poses_base_frame.push_back(pose_cam_frame.value());
             } else {
-                ROS_WARN_THROTTLE(2.0, "[BaslerStereoDriver] error transforming tag from %s camera to base frame",
+                ROS_WARN_THROTTLE(2.0, "[%s] error transforming tag from %s camera to base frame",
+                                  NODENAME.c_str(),
                                   camera_name.c_str());
             }
         }
@@ -534,7 +543,9 @@ namespace basler_stereo_driver {
         for (const auto &el: poses_base_frame) {
             result.push_back(el.pose.pose.position);
         }
-        ROS_INFO_THROTTLE(2.0, "[BaslerStereoDriver]: %s camera tags detection cbk complete", camera_name.c_str());
+        ROS_INFO_THROTTLE(2.0, "[%s]: %s camera tags detection cbk complete",
+                          NODENAME.c_str(),
+                          camera_name.c_str());
 
         return result;
     }
@@ -556,7 +567,6 @@ namespace basler_stereo_driver {
                                                                  std::vector<cv::Point3f> &line,
                                                                  const std::vector<cv::Point2f> &pts) {
         // source https://docs.opencv.org/3.4/da/de9/tutorial_py_epipolar_geometry.html
-//        auto h = img.size[0]; // r
         auto w = img.size[1]; // c
         for (size_t i = 0; i < line.size(); ++i) {
 //        for (size_t i = 0; i < 100; i += 20) {
