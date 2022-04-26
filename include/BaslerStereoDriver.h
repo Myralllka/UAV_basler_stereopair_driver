@@ -60,6 +60,13 @@ inline Eigen::Matrix<typename Derived::Scalar, 3, 3> sqs(const Eigen::MatrixBase
             vec[2], 0.0, -vec[0], -vec[1], vec[0], 0.0).finished();
 }
 
+struct cam_roi_t {
+    int32_t x;
+    int32_t y;
+    int32_t width;
+    int32_t height;
+};
+
 namespace basler_stereo_driver {
 
 /* class BaslerStereoDriver //{ */
@@ -96,15 +103,12 @@ namespace basler_stereo_driver {
 
         mrs_msgs::ImageLabeledArray::Ptr m_impair;
         /* opencv parameters */
-        cv::Mat descriptor1, descriptor2;
-        std::vector<cv::KeyPoint> keypoints1, keypoints2;
-        std::vector<cv::Point2f> keypoints1_p, keypoints2_p;
-        std::vector<cv::Point3f> lines1, lines2;
-        std::vector<cv::DMatch> matches;
-        cv::Ptr<cv::DescriptorMatcher> matcher = cv::DescriptorMatcher::create(cv::DescriptorMatcher::BRUTEFORCE);
-        cv::Ptr<cv::Feature2D> detector = cv::ORB::create(1000);
-        cv::Mat m_F, m_K_CL, m_K_CR;
-        std::vector<cv::Vec3f> epipolar_lines;
+        cv::Ptr<cv::BFMatcher> matcher = cv::BFMatcher::create(cv::NORM_HAMMING, true);
+        cv::Ptr<cv::Feature2D> detector = cv::ORB::create(200);
+        cv::Mat m_K_CL, m_K_CR;
+        cv::Mat mask_left{cv::Mat::zeros(cv::Size{1600, 1200}, CV_8U)};
+        cv::Mat mask_right{cv::Mat::zeros(cv::Size{1600, 1200}, CV_8U)};
+//        std::vector<cv::Vec3f> epipolar_lines;
 
         /* tag detection callback data */
         std::vector<geometry_msgs::Point> m_left_tag_poses;
@@ -125,6 +129,7 @@ namespace basler_stereo_driver {
 
         /* other parameters */
         std::string m_config_filename;
+        cam_roi_t m_fleft_roi, m_fright_roi;
 
         /* fleft camera pose */
         Eigen::Affine3d m_fleft_pose = Eigen::Affine3d::Identity();
@@ -148,7 +153,7 @@ namespace basler_stereo_driver {
         ros::Timer m_tim_tags_coordinates;
         ros::Timer m_tim_fleft_pose;
         ros::Timer m_tim_mse;
-//        ros::Timer m_tim_corresp;
+        ros::Timer m_tim_corresp;
 
         void m_tim_cbk_collect_images(const ros::TimerEvent &ev);
 
@@ -160,13 +165,10 @@ namespace basler_stereo_driver {
 
         void m_tim_cbk_tags_errors(const ros::TimerEvent &ev);
 
-//        void m_tim_cbk_corresp(const ros::TimerEvent &ev);
+        void m_tim_cbk_corresp(const ros::TimerEvent &ev);
 
         // | ----------------------- publishers ----------------------- |
-//        ros::Publisher m_pub_im_corresp;
-//        ros::Publisher m_pub_im_epiright;
-//        ros::Publisher m_pub_im_epileft;
-
+        ros::Publisher m_pub_im_corresp;
         ros::Publisher m_pub_multiview;
 
         // | ----------------------- subscribers ---------------------- |

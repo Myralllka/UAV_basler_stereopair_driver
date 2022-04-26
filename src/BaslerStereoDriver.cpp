@@ -30,6 +30,14 @@ namespace basler_stereo_driver {
         pl.loadParam("m_name_CR", m_name_CR);
         pl.loadParam("fleft_tag_det", m_name_fleft_tag_det);
         pl.loadParam("fright_tag_det", m_name_fright_tag_det);
+        pl.loadParam("cam_fleft_roi/start_x", m_fleft_roi.x);
+        pl.loadParam("cam_fleft_roi/start_y", m_fleft_roi.y);
+        pl.loadParam("cam_fleft_roi/h", m_fleft_roi.height);
+        pl.loadParam("cam_fleft_roi/w", m_fleft_roi.width);
+        pl.loadParam("cam_fright_roi/start_x", m_fright_roi.x);
+        pl.loadParam("cam_fright_roi/start_y", m_fright_roi.y);
+        pl.loadParam("cam_fright_roi/h", m_fright_roi.height);
+        pl.loadParam("cam_fright_roi/w", m_fright_roi.width);
 
         // intrinsic camera parameters (calibration matrices)
         cv::eigen2cv(pl.loadMatrixStatic2<3, 3>("basler_left/camera_matrix/data"), m_K_CL);
@@ -50,9 +58,7 @@ namespace basler_stereo_driver {
         // | ---------------- some data post-processing --------------- |
 
         // | ----------------- publishers initialize ------------------ |
-//        m_pub_im_corresp = nh.advertise<sensor_msgs::Image>("im_corresp", 1);
-//        m_pub_im_epileft = nh.advertise<sensor_msgs::Image>("im_epiright", 1);
-//        m_pub_im_epiright = nh.advertise<sensor_msgs::Image>("im_epileft", 1);
+        m_pub_im_corresp = nh.advertise<sensor_msgs::Image>("im_corresp", 1);
         m_pub_multiview = nh.advertise<mrs_msgs::ImageLabeledArray>("multiview_labeled", 1);
         // | ---------------- subscribers initialize ------------------ |
 
@@ -83,9 +89,9 @@ namespace basler_stereo_driver {
             m_tim_mse = nh.createTimer(ros::Duration(0.0001),
                                        &BaslerStereoDriver::m_tim_cbk_tags_errors,
                                        this);
-//            m_tim_corresp = nh.createTimer(ros::Duration(0.0001),
-//                                           &BaslerStereoDriver::m_tim_cbk_corresp,
-//                                           this);
+            m_tim_corresp = nh.createTimer(ros::Duration(0.0001),
+                                           &BaslerStereoDriver::m_tim_cbk_corresp,
+                                           this);
             // for epipolar lines drawing I'll use subscriber handler
             mrs_lib::SubscribeHandlerOptions shopt{nh};
             shopt.node_name = NODENAME;
@@ -127,6 +133,15 @@ namespace basler_stereo_driver {
 //                                           1,
 //                                           &BaslerStereoDriver::m_cbk_tag_detection_fright,
 //                                           this);
+        // initiate masks for an image matching part
+        mask_left(cv::Rect{m_fleft_roi.x,
+                           m_fleft_roi.y,
+                           m_fleft_roi.width,
+                           m_fleft_roi.height}) = cv::Scalar{255};
+        mask_right(cv::Rect{m_fright_roi.x,
+                            m_fright_roi.y,
+                            m_fright_roi.width,
+                            m_fright_roi.height}) = cv::Scalar{255};
         ROS_INFO_ONCE("[%s]: initialized", NODENAME.c_str());
         m_is_initialized = true;
     }
@@ -177,7 +192,6 @@ namespace basler_stereo_driver {
     void BaslerStereoDriver::m_tim_cbk_collect_images([[maybe_unused]] const ros::TimerEvent &ev) {
         // collect images from almost the same timestamp and publish them as one image
         // I made it because it was so complicated to keep tracking of all image pairs
-        std::cout << "here0\n";
         if (not m_is_initialized) return;
         if (m_handler_imleft.newMsg() and m_handler_imright.newMsg()) {
             imleft = m_handler_imleft.getMsg();
@@ -195,8 +209,6 @@ namespace basler_stereo_driver {
             ROS_WARN_THROTTLE(1.0, "[%s]: impair: no new images", NODENAME.c_str());
             return;
         }
-
-        std::cout << "here1\n";
 
         m_impair = boost::make_shared<mrs_msgs::ImageLabeledArray>();
         mrs_msgs::ImageLabeled im_labeled_fright{};
@@ -229,7 +241,6 @@ namespace basler_stereo_driver {
         m_impair->imgs_labeled.push_back(im_labeled_fright);
         m_impair->imgs_labeled.push_back(im_labeled_fleft);
 
-        std::cout << "here2\n";
         m_pub_multiview.publish(m_impair);
         ROS_INFO_THROTTLE(1.0, "[%s]: impair: impair updated", NODENAME.c_str());
 
@@ -416,96 +427,72 @@ namespace basler_stereo_driver {
 //        }
     }
 
+    void BaslerStereoDriver::m_tim_cbk_corresp([[maybe_unused]] const ros::TimerEvent &ev) {
+        if (not m_is_initialized) return;
 
-//    void BaslerStereoDriver::m_tim_cbk_corresp([[maybe_unused]] const ros::TimerEvent &ev) {
-//        if (not m_is_initialized) return;
-//
-//        if (m_handler_imleft.newMsg() and m_handler_imright.newMsg()) {
-//            ROS_INFO_THROTTLE(2.0, "[%s]: looking for F", NODENAME.c_str());
-//
-//            auto RL = m_transformer.getTransform(m_name_CR,
-//                                                 m_name_CL);
-//
-//            // m_F will be essential matrix here
-//            Eigen::Matrix3d t12 = -sqs(Eigen::Affine3d{tf2::transformToEigen(RL->transform)}.translation().matrix());
-//            Eigen::Matrix3d rrr = Eigen::Affine3d{tf2::transformToEigen(RL->transform)}.rotation().matrix();
-//
-//            cv::eigen2cv(static_cast<Eigen::Matrix3d>(t12 * rrr), m_F);
-//
-//            // now let's make it fundamental
-//            m_F = m_K_CR.inv().t() * m_F * m_K_CL.inv();
-//            ROS_INFO_THROTTLE(2.0, "[%s]: looking for correspondences", NODENAME.c_str());
-//            auto cv_image_left = cv_bridge::toCvCopy(m_handler_imleft.getMsg(), "bgr8").get()->image;
-//            auto cv_image_right = cv_bridge::toCvCopy(m_handler_imright.getMsg(), "bgr8").get()->image;
-//            cv::Mat im_gray_left, im_gray_right;
-//            cv::cvtColor(cv_image_left, im_gray_left, cv::COLOR_BGR2GRAY);
-//            cv::cvtColor(cv_image_right, im_gray_right, cv::COLOR_BGR2GRAY);
-//
-//            // clear previous dynamic storages
-//            lines1.clear();
-//            lines2.clear();
-//            keypoints1.clear();
-//            keypoints2.clear();
-//            keypoints1_p.clear();
-//            keypoints2_p.clear();
+        if (m_handler_imleft.newMsg() and m_handler_imright.newMsg()) {
+            ROS_INFO_THROTTLE(2.0, "[%s]: looking for F", NODENAME.c_str());
+
+            auto RL = m_transformer.getTransform(m_name_CR,
+                                                 m_name_CL);
+
+            ROS_INFO_THROTTLE(2.0, "[%s]: looking for correspondences", NODENAME.c_str());
+            auto cv_image_left = cv_bridge::toCvCopy(m_handler_imleft.getMsg(), "bgr8").get()->image;
+            auto cv_image_right = cv_bridge::toCvCopy(m_handler_imright.getMsg(), "bgr8").get()->image;
+            cv::Mat im_gray_left, im_gray_right;
+            // cover non-overlaping zone with 0, overlaping with 255's
+
+            cv::cvtColor(cv_image_left, im_gray_left, cv::COLOR_BGR2GRAY);
+            cv::cvtColor(cv_image_right, im_gray_right, cv::COLOR_BGR2GRAY);
+
+            // clear previous dynamic storages
+            cv::Mat descriptor1, descriptor2;
+            std::vector<cv::DMatch> matches;
+            std::vector<cv::KeyPoint> keypoints1, keypoints2;
+            std::vector<cv::Point2f> keypoints1_p, keypoints2_p;
 //            epipolar_lines.clear();
-//            std::vector<int> mask1;
-//
-//            // Detect ORB features and compute descriptors.
-//            detector->detectAndCompute(im_gray_left, cv::Mat(), keypoints1, descriptor1);
-//            detector->detectAndCompute(im_gray_right, cv::Mat(), keypoints2, descriptor2);
-//
-//            if (keypoints1.size() < 5 or keypoints2.size() < 5) {
-//                ROS_WARN_THROTTLE(1.0, "[%s]: no keypoints visible", NODENAME.c_str());
-//                return;
-//            }
-//            cv::KeyPoint::convert(keypoints1, keypoints1_p);
-//            cv::KeyPoint::convert(keypoints2, keypoints2_p);
-//
-////            auto H = cv::findHomography(keypoints1_p, keypoints2_p, cv::RANSAC, 2.0, mask1, 10000);
-//            keypoints1_p.clear();
-//            keypoints2_p.clear();
-//
-//            std::vector<int> idxs_nonz;
-//            for (size_t i = 0; i < mask1.size(); ++i) {
-//                if (mask1[i] == 0) continue;
-//                idxs_nonz.push_back(i);
-//            }
-//            cv::KeyPoint::convert(keypoints1, keypoints1_p, idxs_nonz);
-//            cv::KeyPoint::convert(keypoints2, keypoints2_p, idxs_nonz);
-//
-//            cv::computeCorrespondEpilines(keypoints1_p, 1, m_F, lines2);
-//            cv::computeCorrespondEpilines(keypoints2_p, 2, m_F, lines1);
-//
-//            matcher->match(descriptor1, descriptor2, matches, cv::Mat());
-//            std::sort(matches.begin(), matches.end());
-//            const int num_good_matches = matches.size() * 0.05f;
-//            matches.erase(matches.begin() + num_good_matches, matches.end());
-//
-//            cv::Mat im_matches;
-//
-//            cv::drawMatches(cv_image_left,
-//                            keypoints1,
-//                            cv_image_right,
-//                            keypoints2,
-//                            matches,
-//                            im_matches,
-//                            cv::Scalar::all(-1),
-//                            cv::Scalar::all(-1),
-//                            std::vector<char>(),
-//                            cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
-//
-//            m_pub_im_corresp.publish(cv_bridge::CvImage(std_msgs::Header(), "bgr8", im_matches).toImageMsg());
-//            // draw epipolar lines
-//            draw_epipolar_line(cv_image_left, lines2, keypoints1_p);
-//            draw_epipolar_line(cv_image_right, lines1, keypoints2_p);
-//            // publish epipolar lines
-//            m_pub_im_epileft.publish(cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image_left).toImageMsg());
-//            m_pub_im_epiright.publish(cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image_right).toImageMsg());
-//        } else {
-//            ROS_WARN_THROTTLE(2.0, "[%s]: No new images to search for correspondences", NODENAME.c_str());
-//        }
-//    }
+            std::vector<cv::Point3f> lines1, lines2;
+            std::vector<int> homography_mask;
+
+            // detect features and compute correspondances
+            detector->detectAndCompute(im_gray_left, mask_left, keypoints1, descriptor1);
+            detector->detectAndCompute(im_gray_right, mask_right, keypoints2, descriptor2);
+
+            if (keypoints1.size() < 10 or keypoints2.size() < 10) {
+                ROS_WARN_THROTTLE(1.0, "[%s]: no keypoints visible", NODENAME.c_str());
+                return;
+            }
+
+            cv::KeyPoint::convert(keypoints1, keypoints1_p);
+            cv::KeyPoint::convert(keypoints2, keypoints2_p);
+
+            matcher->match(descriptor1,
+                           descriptor2,
+                           matches,
+                           cv::Mat());
+
+            std::sort(matches.begin(), matches.end());
+            const int num_good_matches = matches.size() * 0.5f;
+            matches.erase(matches.begin() + num_good_matches, matches.end());
+            cv::Mat im_matches;
+
+            cv::drawMatches(cv_image_left,
+                            keypoints1,
+                            cv_image_right,
+                            keypoints2,
+                            matches,
+                            im_matches,
+                            cv::Scalar::all(-1),
+                            cv::Scalar::all(-1),
+                            std::vector<char>(),
+                            cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+
+            m_pub_im_corresp.publish(cv_bridge::CvImage(std_msgs::Header(), "bgr8", im_matches).toImageMsg());
+            ROS_INFO_THROTTLE(2.0, "[%s]: Correspondences published", NODENAME.c_str());
+        } else {
+            ROS_WARN_THROTTLE(2.0, "[%s]: No new images to search for correspondences", NODENAME.c_str());
+        }
+    }
 // | -------------------- other functions ------------------- |
 
     std::optional<std::vector<geometry_msgs::Point>>
