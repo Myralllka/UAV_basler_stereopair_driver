@@ -67,6 +67,47 @@ struct cam_roi_t {
     int32_t height;
 };
 
+template<typename T>
+inline cv::Point3d cross(const cv::Point2d &a, const T &b) {
+    return {a.y - b.y,
+            b.x - a.x,
+            a.x * b.y - a.y * b.x};
+}
+
+template<typename T>
+inline cv::Point3d cross(const cv::Point3d &a, const T &b) {
+    return {a.y - a.z * b.y,
+            a.z * b.x - a.x,
+            a.x * b.y - a.y * b.x};
+}
+
+std::pair<cv::Point2d, cv::Point2d> line2image(const cv::Point3d &line, int imwidth) {
+    auto x0 = .0f;
+    auto x1 = static_cast<double>(imwidth);
+    double l0 = line.x;
+    double l1 = line.y;
+    double l2 = line.z;
+    double y0 = -l2 / l1;
+    double y1 = -(l2 + l0 * imwidth) / l1;
+
+    return {cv::Point{static_cast<int>(std::round(x0)), static_cast<int>(std::ceil(y0))},
+            cv::Point{static_cast<int>(std::round(x1)), static_cast<int>(std::ceil(y1))}};
+}
+
+inline void normalize_point(cv::Point3d &p) {
+    p.x /= p.z;
+    p.y /= p.z;
+    p.z /= p.z;
+}
+
+inline void normalize_line(cv::Point3d &p) {
+    auto div = std::sqrt(std::pow(p.x, 2) + std::pow(p.y, 2));
+    p.x /= div;
+    p.y /= div;
+    p.z /= div;
+}
+
+
 namespace basler_stereo_driver {
 
 /* class BaslerStereoDriver //{ */
@@ -108,7 +149,6 @@ namespace basler_stereo_driver {
         cv::Mat m_K_CL, m_K_CR;
         cv::Mat mask_left{cv::Mat::zeros(cv::Size{1600, 1200}, CV_8U)};
         cv::Mat mask_right{cv::Mat::zeros(cv::Size{1600, 1200}, CV_8U)};
-//        std::vector<cv::Vec3f> epipolar_lines;
 
         /* tag detection callback data */
         std::vector<geometry_msgs::Point> m_left_tag_poses;
@@ -148,7 +188,6 @@ namespace basler_stereo_driver {
         // collect images and publish them together
 
         ros::Timer m_tim_collect_images;
-
         ros::Timer m_tim_find_BL;
         ros::Timer m_tim_tags_coordinates;
         ros::Timer m_tim_fleft_pose;
@@ -170,6 +209,8 @@ namespace basler_stereo_driver {
         // | ----------------------- publishers ----------------------- |
         ros::Publisher m_pub_im_corresp;
         ros::Publisher m_pub_multiview;
+        ros::Publisher m_pub_im_left_epipolar;
+        ros::Publisher m_pub_im_right_epipolar;
 
         // | ----------------------- subscribers ---------------------- |
         ros::Subscriber m_sub_camera_fleft;

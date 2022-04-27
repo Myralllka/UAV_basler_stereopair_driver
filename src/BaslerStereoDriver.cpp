@@ -60,6 +60,8 @@ namespace basler_stereo_driver {
         // | ----------------- publishers initialize ------------------ |
         m_pub_im_corresp = nh.advertise<sensor_msgs::Image>("im_corresp", 1);
         m_pub_multiview = nh.advertise<mrs_msgs::ImageLabeledArray>("multiview_labeled", 1);
+        m_pub_im_left_epipolar = nh.advertise<sensor_msgs::Image>("epimleft", 1);
+        m_pub_im_right_epipolar = nh.advertise<sensor_msgs::Image>("epimright", 1);
         // | ---------------- subscribers initialize ------------------ |
 
         // | --------------------- tf transformer --------------------- |
@@ -149,6 +151,7 @@ namespace basler_stereo_driver {
 
 // | ---------------------- msg callbacks --------------------- |
     void BaslerStereoDriver::m_cbk_tag_detection_fright(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg) {
+        if (not m_is_initialized) return;
         std::lock_guard<std::mutex> lt{m_mut_pose_fright};
         auto res = m_tag_detection_cbk_body("right", msg);
         if (res.has_value()) {
@@ -161,6 +164,7 @@ namespace basler_stereo_driver {
     }
 
     void BaslerStereoDriver::m_cbk_tag_detection_fleft(const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg) {
+        if (not m_is_initialized) return;
         std::lock_guard<std::mutex> lt{m_mut_pose_fleft};
         auto res = m_tag_detection_cbk_body("left", msg);
         if (res.has_value()) {
@@ -173,6 +177,7 @@ namespace basler_stereo_driver {
     }
 
     void BaslerStereoDriver::m_cbk_complete_save_calibration(std_msgs::Bool flag) {
+        if (not m_is_initialized) return;
         // if calibration is completed and received flag is True - save all data and close the nodelet
         if (flag.data) {
             std::lock_guard l{m_mut_filtered_CL_pose};
@@ -431,41 +436,55 @@ namespace basler_stereo_driver {
         if (not m_is_initialized) return;
 
         if (m_handler_imleft.newMsg() and m_handler_imright.newMsg()) {
-            ROS_INFO_THROTTLE(2.0, "[%s]: looking for F", NODENAME.c_str());
-
             auto RL = m_transformer.getTransform(m_name_CR,
                                                  m_name_CL);
 
-            ROS_INFO_THROTTLE(2.0, "[%s]: looking for correspondences", NODENAME.c_str());
-            auto cv_image_left = cv_bridge::toCvCopy(m_handler_imleft.getMsg(), "bgr8").get()->image;
-            auto cv_image_right = cv_bridge::toCvCopy(m_handler_imright.getMsg(), "bgr8").get()->image;
-            cv::Mat im_gray_left, im_gray_right;
-            // cover non-overlaping zone with 0, overlaping with 255's
+            auto LR = m_transformer.getTransform(m_name_CL,
+                                                 m_name_CR);
 
+            if (not(LR.has_value() and RL.has_value())) {
+                ROS_WARN_THROTTLE(2.0, "NO RL OR LR transformation");
+                return;
+            } else {
+                ROS_INFO_THROTTLE(2.0, "[%s]: looking for correspondences", NODENAME.c_str());
+            }
+
+            cv::Point3d origin1{LR.value().transform.translation.x,
+                                LR.value().transform.translation.y,
+                                LR.value().transform.translation.z};
+
+            cv::Point3d origin2{RL.value().transform.translation.x,
+                                RL.value().transform.translation.y,
+                                RL.value().transform.translation.z};
+
+            cv::Point2d o1 = m_camera_right.project3dToPixel(origin1);
+            cv::Point2d o2 = m_camera_left.project3dToPixel(origin2);
+            auto cv_image_left = cv_bridge::toCvCopy(m_handler_imleft.getMsg(),
+                                                     "bgr8").get()->image;
+            auto cv_image_right = cv_bridge::toCvCopy(m_handler_imright.getMsg(),
+                                                      "bgr8").get()->image;
+            cv::Mat im_gray_left, im_gray_right;
             cv::cvtColor(cv_image_left, im_gray_left, cv::COLOR_BGR2GRAY);
             cv::cvtColor(cv_image_right, im_gray_right, cv::COLOR_BGR2GRAY);
 
-            // clear previous dynamic storages
             cv::Mat descriptor1, descriptor2;
-            std::vector<cv::DMatch> matches;
             std::vector<cv::KeyPoint> keypoints1, keypoints2;
-            std::vector<cv::Point2f> keypoints1_p, keypoints2_p;
-//            epipolar_lines.clear();
-            std::vector<cv::Point3f> lines1, lines2;
-            std::vector<int> homography_mask;
-
             // detect features and compute correspondances
-            detector->detectAndCompute(im_gray_left, mask_left, keypoints1, descriptor1);
-            detector->detectAndCompute(im_gray_right, mask_right, keypoints2, descriptor2);
+            detector->detectAndCompute(im_gray_left,
+                                       mask_left,
+                                       keypoints1,
+                                       descriptor1);
+            detector->detectAndCompute(im_gray_right,
+                                       mask_right,
+                                       keypoints2,
+                                       descriptor2);
 
             if (keypoints1.size() < 10 or keypoints2.size() < 10) {
                 ROS_WARN_THROTTLE(1.0, "[%s]: no keypoints visible", NODENAME.c_str());
                 return;
             }
 
-            cv::KeyPoint::convert(keypoints1, keypoints1_p);
-            cv::KeyPoint::convert(keypoints2, keypoints2_p);
-
+            std::vector<cv::DMatch> matches;
             matcher->match(descriptor1,
                            descriptor2,
                            matches,
@@ -474,8 +493,64 @@ namespace basler_stereo_driver {
             std::sort(matches.begin(), matches.end());
             const int num_good_matches = matches.size() * 0.5f;
             matches.erase(matches.begin() + num_good_matches, matches.end());
-            cv::Mat im_matches;
 
+            for (auto &matche: matches) {
+                cv::Point2f pt1_cv = keypoints1[matche.queryIdx].pt;
+                cv::Point2f pt2_cv = keypoints2[matche.trainIdx].pt;
+                cv::Point3d ray1_cv = m_camera_left.projectPixelTo3dRay(pt1_cv);
+                cv::Point3d ray2_cv = m_camera_right.projectPixelTo3dRay(pt2_cv);
+                const auto ray1_opt = m_transformer.transform(ray1_cv, LR.value());
+                const auto ray2_opt = m_transformer.transform(ray2_cv, RL.value());
+
+                if (not(ray1_opt.has_value() and ray2_opt.has_value())) {
+                    ROS_WARN_THROTTLE(2.0, "[%s]: It was not possible to transform a ray", m_uav_name.c_str());
+                    return;
+                }
+                ray1_cv = ray1_opt.value();
+                ray2_cv = ray2_opt.value();
+
+                auto epiline2 = cross(m_camera_right.project3dToPixel(ray1_cv), o1);
+                auto epiline1 = cross(m_camera_left.project3dToPixel(ray2_cv), o2);
+
+                normalize_line(epiline1);
+                normalize_line(epiline2);
+
+                auto dist1 = std::abs(epiline1.dot(cv::Point3d{pt1_cv.x, pt1_cv.y, 1}));
+                auto dist2 = std::abs(epiline2.dot(cv::Point3d{pt2_cv.x, pt2_cv.y, 1}));
+
+//                std::cout << "dist1: " << dist1 << ";\ndist2: " << dist2 << ";\nsum: " << dist1 + dist2 << std::endl;
+//                std::cout << "epiline1: " << epiline1 << std::endl;
+//                std::cout << "epiline2: " << epiline2 << std::endl;
+//                std::cout << "pt1: " << pt1_cv << std::endl;
+//                std::cout << "pt2: " << pt2_cv << std::endl;
+
+                auto color = generate_random_color();
+                if (dist1 > 25 or dist2 > 25) {
+                    std::cout << "filtered" << std::endl;
+                    ROS_WARN_THROTTLE(1.0, "filtered corresp");
+                    continue;
+                }
+                // Draw epipolar lines
+                cv::circle(cv_image_left, pt1_cv, 3, color, 3);
+                cv::circle(cv_image_right, pt2_cv, 3, color, 3);
+                auto w = im_gray_left.size[1];
+                auto image_pts = line2image(epiline2, w);
+                auto p1 = image_pts.first;
+                auto p2 = image_pts.second;
+                cv::line(cv_image_right, p1, p2, color, 2);
+
+                image_pts = line2image(epiline1, w);
+                p1 = image_pts.first;
+                p2 = image_pts.second;
+                cv::line(cv_image_left, p1, p2, color, 2);
+
+                m_pub_im_left_epipolar.publish(
+                        cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image_left).toImageMsg());
+                m_pub_im_right_epipolar.publish(
+                        cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image_right).toImageMsg());
+                ROS_INFO_THROTTLE(2.0, "published epipolars");
+            }
+            cv::Mat im_matches;
             cv::drawMatches(cv_image_left,
                             keypoints1,
                             cv_image_right,
