@@ -123,6 +123,8 @@ namespace basler_stereo_driver {
         /* flags */
         bool m_is_initialized = false;
         bool m_is_calibrated = false;
+        bool m_debug_matches;
+        bool m_debug_epipolar;
 
         /* ros parameters */
         std::string m_uav_name;

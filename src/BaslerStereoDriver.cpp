@@ -38,6 +38,8 @@ namespace basler_stereo_driver {
         pl.loadParam("cam_fright_roi/start_y", m_fright_roi.y);
         pl.loadParam("cam_fright_roi/h", m_fright_roi.height);
         pl.loadParam("cam_fright_roi/w", m_fright_roi.width);
+        pl.loadParam("corresp/debug_epipolar", m_debug_epipolar);
+        pl.loadParam("corresp/debug_matches", m_debug_matches);
         int tmp_thr;
         pl.loadParam("corresp/distance_threshold_px", tmp_thr);
         if (tmp_thr < 0) {
@@ -140,14 +142,14 @@ namespace basler_stereo_driver {
                                           &BaslerStereoDriver::m_tim_cbk_fleft_pose,
                                           this);
         // needed
-//        m_sub_camera_fleft = nh.subscribe(m_name_fleft_tag_det,
-//                                          1,
-//                                          &BaslerStereoDriver::m_cbk_tag_detection_fleft,
-//                                          this);
-//        m_sub_camera_fright = nh.subscribe(m_name_fright_tag_det,
-//                                           1,
-//                                           &BaslerStereoDriver::m_cbk_tag_detection_fright,
-//                                           this);
+        m_sub_camera_fleft = nh.subscribe(m_name_fleft_tag_det,
+                                          1,
+                                          &BaslerStereoDriver::m_cbk_tag_detection_fleft,
+                                          this);
+        m_sub_camera_fright = nh.subscribe(m_name_fright_tag_det,
+                                           1,
+                                           &BaslerStereoDriver::m_cbk_tag_detection_fright,
+                                           this);
         // initiate masks for an image matching part
         mask_left(cv::Rect{m_fleft_roi.x,
                            m_fleft_roi.y,
@@ -510,9 +512,9 @@ namespace basler_stereo_driver {
 
             std::vector<cv::DMatch> matches_filtered;
 
-            for (size_t i = 0; i < matches.size(); ++i) {
-                cv::Point2f pt1_cv = keypoints1[matches[i].queryIdx].pt;
-                cv::Point2f pt2_cv = keypoints2[matches[i].trainIdx].pt;
+            for (auto &matche: matches) {
+                cv::Point2f pt1_cv = keypoints1[matche.queryIdx].pt;
+                cv::Point2f pt2_cv = keypoints2[matche.trainIdx].pt;
                 cv::Point3d ray1_cv = m_camera_left.projectPixelTo3dRay(pt1_cv);
                 cv::Point3d ray2_cv = m_camera_right.projectPixelTo3dRay(pt2_cv);
                 const auto ray1_opt = m_transformer.transform(ray1_cv, LR.value());
@@ -535,56 +537,47 @@ namespace basler_stereo_driver {
                 auto dist2 = std::abs(epiline2.dot(cv::Point3d{pt2_cv.x, pt2_cv.y, 1}));
 
                 if (dist1 > 25 or dist2 > 25) {
-                    std::cout << "filtered" << std::endl;
                     ROS_WARN_THROTTLE(1.0, "filtered corresp");
                     continue;
                 }
-                matches_filtered.push_back(matches[i]);
-                // Draw epipolar lines
-//                auto color = generate_random_color();
-//                cv::circle(cv_image_left, pt1_cv, 3, color, 3);
-//                cv::circle(cv_image_right, pt2_cv, 3, color, 3);
-//                auto image_pts = line2image(epiline2, w);
-//                auto p1 = image_pts.first;
-//                auto p2 = image_pts.second;
-//                cv::line(cv_image_right, p1, p2, color, 2);
-//
-//                image_pts = line2image(epiline1, w);
-//                p1 = image_pts.first;
-//                p2 = image_pts.second;
-//                cv::line(cv_image_left, p1, p2, color, 2);
-//
-//                m_pub_im_left_epipolar.publish(
-//                        cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image_left).toImageMsg());
-//                m_pub_im_right_epipolar.publish(
-//                        cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image_right).toImageMsg());
-//                ROS_INFO_THROTTLE(2.0, "published epipolars");
-            }
-            cv::Mat im_matches, im_matches_filtered;
-            cv::drawMatches(cv_image_left,
-                            keypoints1,
-                            cv_image_right,
-                            keypoints2,
-                            matches,
-                            im_matches,
-                            cv::Scalar::all(-1),
-                            cv::Scalar::all(-1),
-                            std::vector<char>(),
-                            cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+                matches_filtered.push_back(matche);
+                if (m_debug_epipolar) {
+                    // Draw epipolar lines
+                    auto color = generate_random_color();
+                    cv::circle(cv_image_left, pt1_cv, 3, color, 3);
+                    cv::circle(cv_image_right, pt2_cv, 3, color, 3);
+                    auto image_pts = line2image(epiline2, w);
+                    auto p1 = image_pts.first;
+                    auto p2 = image_pts.second;
+                    cv::line(cv_image_right, p1, p2, color, 2);
 
-            cv::drawMatches(cv_image_left,
-                            keypoints1,
-                            cv_image_right,
-                            keypoints2,
-                            matches_filtered,
-                            im_matches_filtered,
-                            cv::Scalar::all(-1),
-                            cv::Scalar::all(-1),
-                            std::vector<char>(),
-                            cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
-            m_pub_im_corresp.publish(cv_bridge::CvImage(std_msgs::Header(), "bgr8", im_matches).toImageMsg());
-            m_pub_im_right_epipolar.publish(cv_bridge::CvImage(std_msgs::Header(), "bgr8", im_matches_filtered).toImageMsg());
-            ROS_INFO_THROTTLE(2.0, "[%s]: Correspondences published", NODENAME.c_str());
+                    image_pts = line2image(epiline1, w);
+                    p1 = image_pts.first;
+                    p2 = image_pts.second;
+                    cv::line(cv_image_left, p1, p2, color, 2);
+
+                    m_pub_im_left_epipolar.publish(
+                            cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image_left).toImageMsg());
+                    m_pub_im_right_epipolar.publish(
+                            cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image_right).toImageMsg());
+                    ROS_INFO_THROTTLE(2.0, "published epipolars");
+                }
+            }
+            if (m_debug_matches) {
+                cv::Mat im_matches;
+                cv::drawMatches(cv_image_left,
+                                keypoints1,
+                                cv_image_right,
+                                keypoints2,
+                                matches_filtered,
+                                im_matches,
+                                cv::Scalar::all(-1),
+                                cv::Scalar::all(-1),
+                                std::vector<char>(),
+                                cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+                m_pub_im_corresp.publish(cv_bridge::CvImage(std_msgs::Header(), "bgr8", im_matches).toImageMsg());
+                ROS_INFO_THROTTLE(2.0, "[%s]: Correspondences published", NODENAME.c_str());
+            }
         } else {
             ROS_WARN_THROTTLE(2.0, "[%s]: No new images to search for correspondences", NODENAME.c_str());
         }
