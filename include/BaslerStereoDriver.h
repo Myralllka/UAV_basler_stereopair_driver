@@ -81,7 +81,7 @@ inline cv::Point3d cross(const cv::Point3d &a, const T &b) {
             a.x * b.y - a.y * b.x};
 }
 
-std::pair<cv::Point2d, cv::Point2d> line2image(const cv::Point3d &line, int imwidth) {
+[[maybe_unused]] std::pair<cv::Point2d, cv::Point2d> line2image(const cv::Point3d &line, int imwidth) {
     auto x0 = .0f;
     auto x1 = static_cast<double>(imwidth);
     double l0 = line.x;
@@ -94,13 +94,13 @@ std::pair<cv::Point2d, cv::Point2d> line2image(const cv::Point3d &line, int imwi
             cv::Point{static_cast<int>(std::round(x1)), static_cast<int>(std::ceil(y1))}};
 }
 
-inline void normalize_point(cv::Point3d &p) {
+[[maybe_unused]] inline void normalize_point(cv::Point3d &p) {
     p.x /= p.z;
     p.y /= p.z;
     p.z /= p.z;
 }
 
-inline void normalize_line(cv::Point3d &p) {
+[[maybe_unused]] inline void normalize_line(cv::Point3d &p) {
     auto div = std::sqrt(std::pow(p.x, 2) + std::pow(p.y, 2));
     p.x /= div;
     p.y /= div;
@@ -145,8 +145,11 @@ namespace basler_stereo_driver {
         mrs_msgs::ImageLabeledArray::Ptr m_impair;
         /* opencv parameters */
         cv::Ptr<cv::BFMatcher> matcher = cv::BFMatcher::create(cv::NORM_HAMMING, true);
-        cv::Ptr<cv::Feature2D> detector = cv::ORB::create(200);
+        cv::Ptr<cv::Feature2D> detector;
         cv::Mat m_K_CL, m_K_CR;
+        float m_distance_ratio;
+        size_t m_distance_threshold;
+        // TODO: generalize
         cv::Mat mask_left{cv::Mat::zeros(cv::Size{1600, 1200}, CV_8U)};
         cv::Mat mask_right{cv::Mat::zeros(cv::Size{1600, 1200}, CV_8U)};
 

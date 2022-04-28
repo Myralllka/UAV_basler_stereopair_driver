@@ -60,6 +60,7 @@
       <!-- ROS parameters config file -->
       <rosparam file="$(find basler_stereopair_driver)/config/camera_poses.yaml" />
       <rosparam file="$(find basler_stereopair_driver)/config/cameras_roi.yaml" />
+      <rosparam file="$(find basler_stereopair_driver)/config/general.yaml" />
       <rosparam file="$(find basler_stereopair_driver)/config/camera_calibrations/basler_left.yaml" ns="basler_left" />
       <rosparam file="$(find basler_stereopair_driver)/config/camera_calibrations/basler_right.yaml" ns="basler_right" />
 
