@@ -1,32 +1,39 @@
 <?xml version="1.0"?>
 <package format="2">
 
-  <name>basler_stereopair_driver</name>
-  <version>1.0.0</version>
-  <description>more_desctription</description>
+    <name>basler_stereopair_driver</name>
+    <version>1.0.0</version>
+    <description>more_desctription</description>
 
-  <maintainer email="todo@email.com">todo_name</maintainer>
-  <author email="todo@email.com">todo_name</author>
+    <maintainer email="morhumyk@fel.cvut.cz">Morhunenko Mykola</maintainer>
+    <author email="morhumyk@fel.cvut.cz">Morhunenko Mykola</author>
 
-  <license>MIT</license>
+    <license>MIT</license>
 
-  <buildtool_depend>catkin</buildtool_depend>
-  <depend>roscpp</depend>
-  <depend>nodelet</depend>
-  <depend>std_msgs</depend>
-  <depend>geometry_msgs</depend>
-  <depend>mrs_lib</depend>
-  <depend>mrs_msgs</depend>
-  <depend>nav_msgs</depend>
-  <depend>cv_bridge</depend>
-  <depend>image_geometry</depend>
-  <depend>pylon_camera</depend> <!--https://mrs.felk.cvut.cz/gitlab/uav/drivers/pylon-ros-camera/tree/sdk6.2.0  branch morhunenko-->
-  <depend>apriltag_ros</depend> <!-- https://github.com/AprilRobotics/apriltag_ros -->
+    <buildtool_depend>catkin</buildtool_depend>
+    <build_depend>libpcl-all-dev</build_depend>
+    <exec_depend>libpcl-all</exec_depend>
+    <depend>pcl_ros</depend>
+    <depend>pcl_conversions</depend>
+    <depend>pcl_msgs</depend>
+    <depend>roscpp</depend>
+    <depend>nodelet</depend>
+    <depend>std_msgs</depend>
+    <depend>geometry_msgs</depend>
+    <depend>mrs_lib</depend>
+    <depend>mrs_msgs</depend>
+    <depend>nav_msgs</depend>
+    <depend>cv_bridge</depend>
+    <depend>image_geometry</depend>
+    <!--https://mrs.felk.cvut.cz/gitlab/uav/drivers/pylon-ros-camera/tree/sdk6.2.0  branch morhunenko-->
+    <depend>pylon_camera</depend>
+    <!-- https://github.com/AprilRobotics/apriltag_ros -->
+    <depend>apriltag_ros</depend>
 
-  <export>
-    <!-- The plugins.xml file defines nodelet as a plugin -->
-    <nodelet plugin="${prefix}/plugins.xml" />
+    <export>
+        <!-- The plugins.xml file defines nodelet as a plugin -->
+        <nodelet plugin="${prefix}/plugins.xml"/>
 
-  </export>
+    </export>
 
 </package>

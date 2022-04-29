@@ -36,6 +36,9 @@
 #include <Eigen/Geometry>
 #include <geometry_msgs/TransformStamped.h>
 #include <image_geometry/pinhole_camera_model.h>
+#include <sensor_msgs/PointCloud2.h>
+#include <sensor_msgs/PointField.h>
+#include <sensor_msgs/point_cloud2_iterator.h>
 
 /* opencv */
 #include <cv_bridge/cv_bridge.h>
@@ -145,6 +148,8 @@ namespace basler_stereo_driver {
         sensor_msgs::Image::ConstPtr imright;
 
         mrs_msgs::ImageLabeledArray::Ptr m_impair;
+        cv::Mat m_P_L, m_P_R;
+        Eigen::Matrix<double, 3, 4> m_eig_P_R, m_eig_P_L;
         /* opencv parameters */
         cv::Ptr<cv::BFMatcher> matcher = cv::BFMatcher::create(cv::NORM_HAMMING, true);
         cv::Ptr<cv::Feature2D> detector;
@@ -178,6 +183,7 @@ namespace basler_stereo_driver {
 
         /* fleft camera pose */
         Eigen::Affine3d m_fleft_pose = Eigen::Affine3d::Identity();
+        Eigen::Affine3d m_fright_pose;
         // | --------------------- MRS transformer -------------------- |
 
         mrs_lib::Transformer m_transformer;
@@ -216,6 +222,7 @@ namespace basler_stereo_driver {
         ros::Publisher m_pub_multiview;
         ros::Publisher m_pub_im_left_epipolar;
         ros::Publisher m_pub_im_right_epipolar;
+        ros::Publisher m_pub_pcld;
 
         // | ----------------------- subscribers ---------------------- |
         ros::Subscriber m_sub_camera_fleft;
@@ -234,7 +241,16 @@ namespace basler_stereo_driver {
         image_geometry::PinholeCameraModel m_camera_right;
 
         // | --------------------- other functions -------------------- |
+
+        static std::vector<cv::Point3d> triangulate_points(const Eigen::Matrix<double, 3, 4> &P1,
+                                                    const Eigen::Matrix<double, 3, 4> &P2,
+                                                    const std::vector<cv::Point2d> &u1,
+                                                    const std::vector<cv::Point2d> &u2);
+
+        sensor_msgs::PointCloud2 img_to_cloud(const std::vector<cv::Point3d> &pts);
+
         std::optional<std::vector<geometry_msgs::Point>>
+
         m_tag_detection_cbk_body(const std::string &camera_name,
                                  const apriltag_ros::AprilTagDetectionArray::ConstPtr &msg);
 
