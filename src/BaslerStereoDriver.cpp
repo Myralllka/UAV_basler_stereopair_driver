@@ -87,6 +87,7 @@ namespace basler_stereo_driver {
         // | --------------------- tf transformer --------------------- |
         m_transformer = mrs_lib::Transformer("basler_stereo_driver");
         m_transformer.setDefaultPrefix(m_uav_name);
+        //m_transformer.retryLookupNewest(true);
 
         // | -------------------- initialize timers ------------------- |
         // also there is a difference between calibrated and non-calibrated mode
@@ -616,13 +617,21 @@ namespace basler_stereo_driver {
                                    m_fright_pose.translation().z()};
             std::vector<cv::Point3d> res_pts_3d;
             for (size_t i = 0; i < kpts_filtered_1.size(); ++i) {
-                res_pts_3d.push_back(estimate_point_between_rays(
-                        or1,
-                        or2,
-                        m_camera_left.projectPixelTo3dRay(kpts_filtered_1[i]),
-                        m_camera_right.projectPixelTo3dRay(kpts_filtered_2[i])));
+                auto ray_opt = m_transformer.transformSingle(m_name_CL,
+                                                             m_camera_left.projectPixelTo3dRay(kpts_filtered_1[i]),
+                                                             m_name_base,
+                                                             ros::Time(0));
+                auto ray2_opt = m_transformer.transformSingle(m_name_CR,
+                                                              m_camera_right.projectPixelTo3dRay(kpts_filtered_2[i]),
+                                                              m_name_base,
+                                                              ros::Time(0));
+                if (ray_opt.has_value() and ray2_opt.has_value()) {
+                    res_pts_3d.push_back(estimate_point_between_rays(or1,
+                                                                     or2,
+                                                                     ray_opt.value(),
+                                                                     ray2_opt.value()));
+                }
             }
-            std::cout << res_pts_3d << std::endl;
             res_pts_3d.push_back(or1);
             res_pts_3d.push_back(or2);
             auto pc = pts_to_cloud(res_pts_3d);
@@ -681,19 +690,112 @@ namespace basler_stereo_driver {
 
     // ===================== UTILS =====================
 
-    cv::Point3d BaslerStereoDriver::estimate_point_between_rays(const cv::Point3d &O1,
-                                                                const cv::Point3d &O2,
-                                                                const cv::Point3d &ray1,
-                                                                const cv::Point3d &ray2) {
-        const double k1 = (O2.dot(ray1) / ray1.dot(ray1)) - (O1.dot(ray1) / ray1.dot(ray1));
-        const double k2 = (O1.dot(ray2) / ray2.dot(ray2)) - (O2.dot(ray2) / ray2.dot(ray2));
-        const double l1 = ray1.dot(ray2) / ray1.dot(ray1);
-        const double l2 = ray1.dot(ray2) / ray2.dot(ray2);
-        const double t = (k1 + k2 * l2) / (1 - l1 * l2);
-//        const double s = k2 + l2 * t;
-        cv::Point3d P1 = O1 + t * ray1;
-//        cv::Point3d P2 = O2 + s * ray2;
-        return P1 ;
+    cv::Point3d BaslerStereoDriver::estimate_point_between_rays(const cv::Point3d &o1,
+                                                                const cv::Point3d &o2,
+                                                                const cv::Point3d &r1,
+                                                                const cv::Point3d &r2) {
+        auto r1x = r1.x;
+        auto r1y = r1.y;
+        auto r1z = r1.z;
+        auto r2x = r2.x;
+        auto r2y = r2.y;
+        auto r2z = r2.z;
+        auto o1x = o1.x;
+        auto o1y = o1.y;
+        auto o1z = o1.z;
+        auto o2x = o2.x;
+        auto o2y = o2.y;
+        auto o2z = o2.z;
+
+        auto t = (o1x * r2x * std::pow(r1y, 2) -
+                  o2x * r2x * std::pow(r1y, 2) +
+                  o1x * r2x * std::pow(r1z, 2) +
+                  o1y * std::pow(r1x, 2) * r2y -
+                  o2x * r2x * std::pow(r1z, 2) -
+                  o2y * std::pow(r1x, 2) * r2y +
+                  o1y * r2y * std::pow(r1z, 2) +
+                  o1z * std::pow(r1x, 2) * r2z -
+                  o2y * r2y * std::pow(r1z, 2) -
+                  o2.z * std::pow(r1x, 2) * r2.z +
+                  o1z * std::pow(r1y, 2) * r2z -
+                  o2z * std::pow(r1y, 2) * r2z -
+                  o1x * r1x * r1.y * r2.y -
+                  o1y * r1x * r2x * r1y +
+                  o2x * r1x * r1y * r2y +
+                  o2y * r1x * r2x * r1y -
+                  o1x * r1x * r1z * r2z -
+                  o1z * r1x * r2x * r1z +
+                  o2x * r1x * r1z * r2z +
+                  o2z * r1x * r2x * r1z -
+                  o1y * r1y * r1z * r2z -
+                  o1z * r1y * r2y * r1z +
+                  o2y * r1y * r1z * r2z +
+                  o2z * r1y * r2y * r1z) /
+                 (std::pow(r1x, 2) * std::pow(r2y, 2) +
+                  std::pow(r1x, 2) * std::pow(r2z, 2) -
+                  2 * r1x * r2x * r1y * r2y -
+                  2 * r1x * r2x * r1z * r2z +
+                  std::pow(r2x, 2) * std::pow(r1y, 2) +
+                  std::pow(r2x, 2) * std::pow(r1z, 2) +
+                  std::pow(r1y, 2) * std::pow(r2z, 2) -
+                  2 * r1y * r2y * r1z * r2z +
+                  std::pow(r2y, 2) * std::pow(r1z, 2));
+
+
+        auto s = -(o1x * r1x * std::pow(r2y, 2) -
+                   o2x * r1x * std::pow(r2y, 2) +
+                   o1x * r1x * std::pow(r2z, 2) +
+                   o1y * std::pow(r2x, 2) * r1y -
+                   o2x * r1x * std::pow(r2z, 2) -
+                   o2y * std::pow(r2x, 2) * r1y +
+                   o1y * r1y * std::pow(r2z, 2) +
+                   o1z * std::pow(r2x, 2) * r1z -
+                   o2y * r1y * std::pow(r2z, 2) -
+                   o2z * std::pow(r2x, 2) * r1z +
+                   o1z * std::pow(r2y, 2) * r1z -
+                   o2z * std::pow(r2y, 2) * r1z -
+                   o1x * r2x * r1y * r2y -
+                   o1y * r1x * r2x * r2y +
+                   o2x * r2x * r1y * r2y +
+                   o2y * r1x * r2x * r2y -
+                   o1x * r2x * r1z * r2z -
+                   o1z * r1x * r2x * r2z +
+                   o2x * r2x * r1z * r2z +
+                   o2z * r1x * r2x * r2z -
+                   o1y * r2y * r1z * r2z -
+                   o1z * r1y * r2y * r2z +
+                   o2y * r2y * r1z * r2z +
+                   o2z * r1y * r2y * r2z) /
+                 (std::pow(r1x, 2) * std::pow(r2y, 2) +
+                  std::pow(r1x, 2) * std::pow(r2z, 2) -
+                  2 * r1x * r2x * r1y * r2y -
+                  2 * r1x * r2x * r1z * r2z +
+                  std::pow(r2x, 2) * std::pow(r1y, 2) +
+                  std::pow(r2x, 2) * std::pow(r1z, 2) +
+                  std::pow(r1y, 2) * std::pow(r2z, 2) -
+                  2 * r1y * r2y * r1z * r2z +
+                  std::pow(r2y, 2) * std::pow(r1z, 2));
+//        auto k1 = r1.x * O2.x - r1.x * O1.x +
+//                  r1.y * O2.y - r1.y * O1.y +
+//                  r1.z * O2.z - r1.z * O1.z;
+//
+//        auto k2 = r2.x * O1.x - r2.x * O2.x +
+//                  r2.y * O1.y - r2.y * O2.y +
+//                  r2.z * O1.z - r2.z * O2.z;
+
+//        k1 /= r1.dot(r1);
+//        k2 /= r2.dot(r2);
+//
+//        auto p1 = r1.dot(r2) / r1.dot(r1);
+//        auto p2 = r1.dot(r2) / r2.dot(r2);
+//
+//        auto t = (k1 + k2 * p1);
+//
+//        auto s = k2 + t * p2;
+        auto P1 = o1 + t * r1;
+        auto P2 = o2 + s * r2;
+        auto res = (P1 + P2) / 2;
+        return res;
     }
 
     visualization_msgs::Marker
@@ -780,7 +882,7 @@ namespace basler_stereo_driver {
             //get the image coordinate for this point and convert to mm
             cv::Point3d pointcoord = pts[i];
             float X_World = pointcoord.x;
-            float Y_World = pointcoord.y ;
+            float Y_World = pointcoord.y;
             float Z_World = pointcoord.z;
             //store xyz in point cloud, transforming from image coordinates, (Z Forward to X Forward)
             *out_x = X_World;
