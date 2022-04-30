@@ -39,6 +39,8 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <sensor_msgs/PointField.h>
 #include <sensor_msgs/point_cloud2_iterator.h>
+#include <visualization_msgs/Marker.h>
+#include <visualization_msgs/MarkerArray.h>
 
 /* opencv */
 #include <cv_bridge/cv_bridge.h>
@@ -205,7 +207,7 @@ namespace basler_stereo_driver {
         ros::Timer m_tim_mse;
         ros::Timer m_tim_corresp;
 
-        void m_tim_cbk_collect_images(const ros::TimerEvent &ev);
+//        void m_tim_cbk_collect_images(const ros::TimerEvent &ev);
 
         void m_tim_cbk_find_BL(const ros::TimerEvent &ev);
 
@@ -218,6 +220,7 @@ namespace basler_stereo_driver {
         void m_tim_cbk_corresp(const ros::TimerEvent &ev);
 
         // | ----------------------- publishers ----------------------- |
+        ros::Publisher m_pub_markarray;
         ros::Publisher m_pub_im_corresp;
         ros::Publisher m_pub_multiview;
         ros::Publisher m_pub_im_left_epipolar;
@@ -243,11 +246,11 @@ namespace basler_stereo_driver {
         // | --------------------- other functions -------------------- |
 
         static std::vector<cv::Point3d> triangulate_points(const Eigen::Matrix<double, 3, 4> &P1,
-                                                    const Eigen::Matrix<double, 3, 4> &P2,
-                                                    const std::vector<cv::Point2d> &u1,
-                                                    const std::vector<cv::Point2d> &u2);
+                                                           const Eigen::Matrix<double, 3, 4> &P2,
+                                                           const std::vector<cv::Point2d> &u1,
+                                                           const std::vector<cv::Point2d> &u2);
 
-        sensor_msgs::PointCloud2 img_to_cloud(const std::vector<cv::Point3d> &pts);
+        sensor_msgs::PointCloud2 pts_to_cloud(const std::vector<cv::Point3d> &pts);
 
         std::optional<std::vector<geometry_msgs::Point>>
 
@@ -257,6 +260,17 @@ namespace basler_stereo_driver {
         Eigen::Affine3d m_interpolate_pose(const Eigen::Affine3d &input_avg,
                                            const Eigen::Affine3d &other);
         // ------------------------ UTILS -----------------------------
+
+        cv::Point3d estimate_point_between_rays(const cv::Point3d &O1,
+                                                const cv::Point3d &O2,
+                                                const cv::Point3d &ray1,
+                                                const cv::Point3d &ray2);
+
+        visualization_msgs::Marker create_marker(const cv::Point3d &pt,
+                                                 const geometry_msgs::Point O,
+                                                 const std::string &cam_name,
+                                                 const int id,
+                                                 const cv::Scalar &color);
 
         [[maybe_unused]] void draw_epipolar_line(cv::Mat &img,
                                                  std::vector<cv::Point3f> &line,
