@@ -261,8 +261,8 @@ namespace basler_stereo_driver {
                                            const Eigen::Affine3d &other);
         // ------------------------ UTILS -----------------------------
 
-        cv::Point3d estimate_point_between_rays(const cv::Point3d &O1,
-                                                const cv::Point3d &O2,
+        cv::Point3d estimate_point_between_rays(const Eigen::Vector3d &o1,
+                                                const Eigen::Vector3d &o2,
                                                 const Eigen::Vector3d &r1,
                                                 const Eigen::Vector3d &r2);
 

@@ -617,14 +617,8 @@ namespace basler_stereo_driver {
                 auto cv_ray1 = m_camera_left.projectPixelTo3dRay(kpts_filtered_1[i]);
                 auto cv_ray2 = m_camera_right.projectPixelTo3dRay(kpts_filtered_2[i]);
 
-                Eigen::Vector3d eigen_vec1, eigen_vec2;
-                eigen_vec1.x() = cv_ray1.x;
-                eigen_vec1.y() = cv_ray1.y;
-                eigen_vec1.z() = cv_ray1.z;
-
-                eigen_vec2.x() = cv_ray2.x;
-                eigen_vec2.y() = cv_ray2.y;
-                eigen_vec2.z() = cv_ray2.z;
+                Eigen::Vector3d eigen_vec1{cv_ray1.x, cv_ray1.y, cv_ray1.z};
+                Eigen::Vector3d eigen_vec2{cv_ray2.x, cv_ray2.y, cv_ray2.z};
 
                 auto ray_opt = m_transformer.transformSingle(m_name_CL,
                                                              eigen_vec1,
@@ -635,8 +629,8 @@ namespace basler_stereo_driver {
                                                               m_name_base,
                                                               ros::Time(0));
                 if (ray_opt.has_value() and ray2_opt.has_value()) {
-                    auto pt = estimate_point_between_rays(or1,
-                                                          or2,
+                    auto pt = estimate_point_between_rays({or1.x, or1.y, or1.z},
+                                                          {or2.x, or2.y, or2.z},
                                                           ray_opt.value(),
                                                           ray2_opt.value());
                     res_pts_3d.push_back(pt);
@@ -704,34 +698,36 @@ namespace basler_stereo_driver {
 
     // ===================== UTILS =====================
 
-    cv::Point3d BaslerStereoDriver::estimate_point_between_rays(const cv::Point3d &o1,
-                                                                const cv::Point3d &o2,
+    cv::Point3d BaslerStereoDriver::estimate_point_between_rays(const Eigen::Vector3d &o1,
+                                                                const Eigen::Vector3d &o2,
                                                                 const Eigen::Vector3d &r1,
                                                                 const Eigen::Vector3d &r2) {
-        auto k1 = r1.x() * o2.x - r1.x() * o1.x +
-                  r1.y() * o2.y - r1.y() * o1.y +
-                  r1.z() * o2.z - r1.z() * o1.z;
+        const Eigen::Vector3d m = o2 - o1;
+        const Eigen::Vector3d d1 = r1.normalized();
+        const Eigen::Vector3d d2 = r2.normalized();
 
-        auto k2 = r2.x() * o1.x - r2.x() * o2.x +
-                  r2.y() * o1.y - r2.y() * o2.y +
-                  r2.z() * o1.z - r2.z() * o2.z;
+        const double s = std::abs((d2.dot(m) - d1.dot(m) * d1.dot(d2)) / (1.0 - d1.dot(d2) * d1.dot(d2)));
+        const double t = std::abs((d1.dot(m) + s * d1.dot(d2)));
 
-        k1 /= r1.dot(r1);
-        k2 /= r2.dot(r2);
+//        if (s < 0.0 or t < 0.0)
+//        {
+//            ROS_INFO("[%s]: s: %.2f, t: %.2f",
+//                     NODENAME.c_str(),
+//                     s, t);
+//        }
 
-        auto p1 = r1.dot(r2) / r1.dot(r1);
-        auto p2 = r1.dot(r2) / r2.dot(r2);
+        const Eigen::Vector3d p1 = o1 + t * d1;
+        const Eigen::Vector3d p2 = o2 + s * d2;
 
-        auto t = (k1 + k2 * p1) / (1 - p1 * p2);
-        auto s = k2 + t * p2;
+        const Eigen::Vector3d res = (p1 + p2) / 2;
 
-        cv::Point3d tmp_r1{r1.x(), r1.y(), r1.z()};
-        cv::Point3d tmp_r2{r2.x(), r2.y(), r2.z()};
-        auto P1 = o1 + t * tmp_r1;
-        auto P2 = o2 + s * tmp_r2;
-
-        auto res = (P1 + P2) / 2;
-        return res;
+        ROS_INFO_THROTTLE(2.0, "[%s]: closest distance of rays: %.2fm",
+                          NODENAME.c_str(),
+                          (p2 - p1).norm());
+        ROS_INFO_THROTTLE(2.0, "[%s]: distance to the object: %.2fm",
+                          NODENAME.c_str(),
+                          res.norm());
+        return cv::Point3d{res.x(), res.y(), res.z()};
     }
 
     visualization_msgs::Marker
@@ -772,10 +768,6 @@ namespace basler_stereo_driver {
         visualization_msgs::Marker m1;
         m1.header.frame_id = m_name_base;
         m1.header.stamp = ros::Time::now();
-        geometry_msgs::Point p1;
-        p1.x = pt.x * 100;
-        p1.y = pt.y * 100;
-        p1.z = pt.z * 100;
         m1.ns = "points";
         m1.id = id;
         m1.color.a = 1;
@@ -783,7 +775,6 @@ namespace basler_stereo_driver {
         m1.color.r = color[0] / 255.0;
         m1.color.g = color[1] / 255.0;
         m1.color.b = color[2] / 255.0;
-        m1.points.push_back(p1);
         m1.pose.position.x = pt.x;
         m1.pose.position.y = pt.y;
         m1.pose.position.z = pt.z;
