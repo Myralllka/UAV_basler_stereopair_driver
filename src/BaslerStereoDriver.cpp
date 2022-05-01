@@ -572,20 +572,6 @@ namespace basler_stereo_driver {
             O2.y = 0;
             O2.z = 0;
             int counter = 0;
-            for (size_t i = 0; i < kpts_filtered_1.size(); ++i) {
-                auto color = generate_random_color();
-                markerarr->markers.emplace_back(create_marker(m_camera_left.projectPixelTo3dRay(kpts_filtered_1[i]),
-                                                              O1,
-                                                              m_name_CL,
-                                                              counter++,
-                                                              color));
-                markerarr->markers.emplace_back(create_marker(m_camera_left.projectPixelTo3dRay(kpts_filtered_2[i]),
-                                                              O2,
-                                                              m_name_CR,
-                                                              counter++,
-                                                              color));
-                m_pub_markarray.publish(markerarr);
-            }
             // TODO: fixit
             // triangulate points
             // vector of cv::Point_<double, 3>
@@ -617,21 +603,49 @@ namespace basler_stereo_driver {
                                    m_fright_pose.translation().z()};
             std::vector<cv::Point3d> res_pts_3d;
             for (size_t i = 0; i < kpts_filtered_1.size(); ++i) {
+                auto color = generate_random_color();
+                markerarr->markers.emplace_back(create_marker_ray(m_camera_left.projectPixelTo3dRay(kpts_filtered_1[i]),
+                                                                  O1,
+                                                                  m_name_CL,
+                                                                  counter++,
+                                                                  color));
+                markerarr->markers.emplace_back(create_marker_ray(m_camera_left.projectPixelTo3dRay(kpts_filtered_2[i]),
+                                                                  O2,
+                                                                  m_name_CR,
+                                                                  counter++,
+                                                                  color));
+                auto cv_ray1 = m_camera_left.projectPixelTo3dRay(kpts_filtered_1[i]);
+                auto cv_ray2 = m_camera_right.projectPixelTo3dRay(kpts_filtered_2[i]);
+
+                Eigen::Vector3d eigen_vec1, eigen_vec2;
+                eigen_vec1.x() = cv_ray1.x;
+                eigen_vec1.y() = cv_ray1.y;
+                eigen_vec1.z() = cv_ray1.z;
+
+                eigen_vec2.x() = cv_ray2.x;
+                eigen_vec2.y() = cv_ray2.y;
+                eigen_vec2.z() = cv_ray2.z;
+
                 auto ray_opt = m_transformer.transformSingle(m_name_CL,
-                                                             m_camera_left.projectPixelTo3dRay(kpts_filtered_1[i]),
+                                                             eigen_vec1,
                                                              m_name_base,
                                                              ros::Time(0));
                 auto ray2_opt = m_transformer.transformSingle(m_name_CR,
-                                                              m_camera_right.projectPixelTo3dRay(kpts_filtered_2[i]),
+                                                              eigen_vec2,
                                                               m_name_base,
                                                               ros::Time(0));
                 if (ray_opt.has_value() and ray2_opt.has_value()) {
-                    res_pts_3d.push_back(estimate_point_between_rays(or1,
-                                                                     or2,
-                                                                     ray_opt.value(),
-                                                                     ray2_opt.value()));
+                    auto pt = estimate_point_between_rays(or1,
+                                                          or2,
+                                                          ray_opt.value(),
+                                                          ray2_opt.value());
+                    res_pts_3d.push_back(pt);
+//                    markerarr->markers.push_back(create_marker_pt(pt,
+//                                                                  counter++,
+//                                                                  color));
                 }
             }
+            m_pub_markarray.publish(markerarr);
             res_pts_3d.push_back(or1);
             res_pts_3d.push_back(or2);
             auto pc = pts_to_cloud(res_pts_3d);
@@ -692,118 +706,40 @@ namespace basler_stereo_driver {
 
     cv::Point3d BaslerStereoDriver::estimate_point_between_rays(const cv::Point3d &o1,
                                                                 const cv::Point3d &o2,
-                                                                const cv::Point3d &r1,
-                                                                const cv::Point3d &r2) {
-        auto r1x = r1.x;
-        auto r1y = r1.y;
-        auto r1z = r1.z;
-        auto r2x = r2.x;
-        auto r2y = r2.y;
-        auto r2z = r2.z;
-        auto o1x = o1.x;
-        auto o1y = o1.y;
-        auto o1z = o1.z;
-        auto o2x = o2.x;
-        auto o2y = o2.y;
-        auto o2z = o2.z;
+                                                                const Eigen::Vector3d &r1,
+                                                                const Eigen::Vector3d &r2) {
+        auto k1 = r1.x() * o2.x - r1.x() * o1.x +
+                  r1.y() * o2.y - r1.y() * o1.y +
+                  r1.z() * o2.z - r1.z() * o1.z;
 
-        auto t = (o1x * r2x * std::pow(r1y, 2) -
-                  o2x * r2x * std::pow(r1y, 2) +
-                  o1x * r2x * std::pow(r1z, 2) +
-                  o1y * std::pow(r1x, 2) * r2y -
-                  o2x * r2x * std::pow(r1z, 2) -
-                  o2y * std::pow(r1x, 2) * r2y +
-                  o1y * r2y * std::pow(r1z, 2) +
-                  o1z * std::pow(r1x, 2) * r2z -
-                  o2y * r2y * std::pow(r1z, 2) -
-                  o2.z * std::pow(r1x, 2) * r2.z +
-                  o1z * std::pow(r1y, 2) * r2z -
-                  o2z * std::pow(r1y, 2) * r2z -
-                  o1x * r1x * r1.y * r2.y -
-                  o1y * r1x * r2x * r1y +
-                  o2x * r1x * r1y * r2y +
-                  o2y * r1x * r2x * r1y -
-                  o1x * r1x * r1z * r2z -
-                  o1z * r1x * r2x * r1z +
-                  o2x * r1x * r1z * r2z +
-                  o2z * r1x * r2x * r1z -
-                  o1y * r1y * r1z * r2z -
-                  o1z * r1y * r2y * r1z +
-                  o2y * r1y * r1z * r2z +
-                  o2z * r1y * r2y * r1z) /
-                 (std::pow(r1x, 2) * std::pow(r2y, 2) +
-                  std::pow(r1x, 2) * std::pow(r2z, 2) -
-                  2 * r1x * r2x * r1y * r2y -
-                  2 * r1x * r2x * r1z * r2z +
-                  std::pow(r2x, 2) * std::pow(r1y, 2) +
-                  std::pow(r2x, 2) * std::pow(r1z, 2) +
-                  std::pow(r1y, 2) * std::pow(r2z, 2) -
-                  2 * r1y * r2y * r1z * r2z +
-                  std::pow(r2y, 2) * std::pow(r1z, 2));
+        auto k2 = r2.x() * o1.x - r2.x() * o2.x +
+                  r2.y() * o1.y - r2.y() * o2.y +
+                  r2.z() * o1.z - r2.z() * o2.z;
 
+        k1 /= r1.dot(r1);
+        k2 /= r2.dot(r2);
 
-        auto s = -(o1x * r1x * std::pow(r2y, 2) -
-                   o2x * r1x * std::pow(r2y, 2) +
-                   o1x * r1x * std::pow(r2z, 2) +
-                   o1y * std::pow(r2x, 2) * r1y -
-                   o2x * r1x * std::pow(r2z, 2) -
-                   o2y * std::pow(r2x, 2) * r1y +
-                   o1y * r1y * std::pow(r2z, 2) +
-                   o1z * std::pow(r2x, 2) * r1z -
-                   o2y * r1y * std::pow(r2z, 2) -
-                   o2z * std::pow(r2x, 2) * r1z +
-                   o1z * std::pow(r2y, 2) * r1z -
-                   o2z * std::pow(r2y, 2) * r1z -
-                   o1x * r2x * r1y * r2y -
-                   o1y * r1x * r2x * r2y +
-                   o2x * r2x * r1y * r2y +
-                   o2y * r1x * r2x * r2y -
-                   o1x * r2x * r1z * r2z -
-                   o1z * r1x * r2x * r2z +
-                   o2x * r2x * r1z * r2z +
-                   o2z * r1x * r2x * r2z -
-                   o1y * r2y * r1z * r2z -
-                   o1z * r1y * r2y * r2z +
-                   o2y * r2y * r1z * r2z +
-                   o2z * r1y * r2y * r2z) /
-                 (std::pow(r1x, 2) * std::pow(r2y, 2) +
-                  std::pow(r1x, 2) * std::pow(r2z, 2) -
-                  2 * r1x * r2x * r1y * r2y -
-                  2 * r1x * r2x * r1z * r2z +
-                  std::pow(r2x, 2) * std::pow(r1y, 2) +
-                  std::pow(r2x, 2) * std::pow(r1z, 2) +
-                  std::pow(r1y, 2) * std::pow(r2z, 2) -
-                  2 * r1y * r2y * r1z * r2z +
-                  std::pow(r2y, 2) * std::pow(r1z, 2));
-//        auto k1 = r1.x * O2.x - r1.x * O1.x +
-//                  r1.y * O2.y - r1.y * O1.y +
-//                  r1.z * O2.z - r1.z * O1.z;
-//
-//        auto k2 = r2.x * O1.x - r2.x * O2.x +
-//                  r2.y * O1.y - r2.y * O2.y +
-//                  r2.z * O1.z - r2.z * O2.z;
+        auto p1 = r1.dot(r2) / r1.dot(r1);
+        auto p2 = r1.dot(r2) / r2.dot(r2);
 
-//        k1 /= r1.dot(r1);
-//        k2 /= r2.dot(r2);
-//
-//        auto p1 = r1.dot(r2) / r1.dot(r1);
-//        auto p2 = r1.dot(r2) / r2.dot(r2);
-//
-//        auto t = (k1 + k2 * p1);
-//
-//        auto s = k2 + t * p2;
-        auto P1 = o1 + t * r1;
-        auto P2 = o2 + s * r2;
+        auto t = (k1 + k2 * p1) / (1 - p1 * p2);
+        auto s = k2 + t * p2;
+
+        cv::Point3d tmp_r1{r1.x(), r1.y(), r1.z()};
+        cv::Point3d tmp_r2{r2.x(), r2.y(), r2.z()};
+        auto P1 = o1 + t * tmp_r1;
+        auto P2 = o2 + s * tmp_r2;
+
         auto res = (P1 + P2) / 2;
         return res;
     }
 
     visualization_msgs::Marker
-    BaslerStereoDriver::create_marker(const cv::Point3d &pt,
-                                      const geometry_msgs::Point O,
-                                      const std::string &cam_name,
-                                      const int id,
-                                      const cv::Scalar &color) {
+    BaslerStereoDriver::create_marker_ray(const cv::Point3d &pt,
+                                          const geometry_msgs::Point O,
+                                          const std::string &cam_name,
+                                          const int id,
+                                          const cv::Scalar &color) {
         visualization_msgs::Marker m1;
         m1.header.frame_id = cam_name;
         m1.header.stamp = ros::Time::now();
@@ -812,7 +748,7 @@ namespace basler_stereo_driver {
         p1.x = pt.x;
         p1.y = pt.y;
         p1.z = pt.z;
-        m1.ns = "my";
+        m1.ns = "rays";
         m1.id = id;
 //        m1.action = visualization_msgs::Marker::ADD;
         m1.color.a = 1;
@@ -826,6 +762,36 @@ namespace basler_stereo_driver {
         m1.scale.x = 0.001;
         m1.scale.y = 0.01;
         m1.scale.z = 0;
+        return m1;
+    }
+
+    visualization_msgs::Marker
+    BaslerStereoDriver::create_marker_pt(const cv::Point3d &pt,
+                                         const int id,
+                                         const cv::Scalar &color) {
+        visualization_msgs::Marker m1;
+        m1.header.frame_id = m_name_base;
+        m1.header.stamp = ros::Time::now();
+        geometry_msgs::Point p1;
+        p1.x = pt.x * 100;
+        p1.y = pt.y * 100;
+        p1.z = pt.z * 100;
+        m1.ns = "points";
+        m1.id = id;
+        m1.color.a = 1;
+        m1.lifetime = ros::Duration(1.0);
+        m1.color.r = color[0] / 255.0;
+        m1.color.g = color[1] / 255.0;
+        m1.color.b = color[2] / 255.0;
+        m1.points.push_back(p1);
+        m1.pose.position.x = pt.x;
+        m1.pose.position.y = pt.y;
+        m1.pose.position.z = pt.z;
+        std::cout << m1.points[0] << std::endl;
+        m1.type = visualization_msgs::Marker::SPHERE;
+        m1.scale.x = 0.1;
+        m1.scale.y = 0.1;
+        m1.scale.z = 0.1;
         return m1;
     }
 

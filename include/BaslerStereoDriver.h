@@ -263,14 +263,18 @@ namespace basler_stereo_driver {
 
         cv::Point3d estimate_point_between_rays(const cv::Point3d &O1,
                                                 const cv::Point3d &O2,
-                                                const cv::Point3d &ray1,
-                                                const cv::Point3d &ray2);
+                                                const Eigen::Vector3d &r1,
+                                                const Eigen::Vector3d &r2);
 
-        visualization_msgs::Marker create_marker(const cv::Point3d &pt,
-                                                 const geometry_msgs::Point O,
-                                                 const std::string &cam_name,
-                                                 const int id,
-                                                 const cv::Scalar &color);
+        [[maybe_unused]]visualization_msgs::Marker create_marker_ray(const cv::Point3d &pt,
+                                                                     const geometry_msgs::Point O,
+                                                                     const std::string &cam_name,
+                                                                     const int id,
+                                                                     const cv::Scalar &color);
+
+        [[maybe_unused]]visualization_msgs::Marker create_marker_pt(const cv::Point3d &pt,
+                                                                    const int id,
+                                                                    const cv::Scalar &color);
 
         [[maybe_unused]] void draw_epipolar_line(cv::Mat &img,
                                                  std::vector<cv::Point3f> &line,

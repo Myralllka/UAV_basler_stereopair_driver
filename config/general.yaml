@@ -1,6 +1,6 @@
 corresp:
   n_features: 200
-  distance_threshold_px: 8
+  distance_threshold_px: 3
   distances_ratio: 0.5
   debug_matches: true
   debug_epipolar: true
