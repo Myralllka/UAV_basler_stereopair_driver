@@ -16,15 +16,18 @@
     <arg if="$(arg debug)" name="launch_prefix_debug" value="debug_roslaunch"/>
 
     <!-- will it run as standalone nodelet or using a nodelet manager? -->
-    <arg name="manager" default="$(arg UAV_NAME)_basler_stereopair_driver_manager" />
-    <arg     if="$(arg standalone)" name="nodelet" value="standalone"/>
+    <arg name="manager" default="$(arg UAV_NAME)_basler_stereopair_driver_manager"/>
+    <arg if="$(arg standalone)" name="nodelet" value="standalone"/>
     <arg unless="$(arg standalone)" name="nodelet" value="load"/>
-    <arg     if="$(arg standalone)" name="nodelet_manager" value=""/>
+    <arg if="$(arg standalone)" name="nodelet_manager" value=""/>
     <arg unless="$(arg standalone)" name="nodelet_manager" value="$(arg manager)"/>
-<!--     <include file="$(find apriltag_ros)/launch/continuous_detection.launch"/> -->
-<!--     <include file="$(find spinnaker_camera_driver)/launch/camera.launch"/> -->
 
-<!--     <node pkg="topic_tools" type="relay" args="/camera/image_color /camera_rect/image_rect" name="raw2rect" output="log"/> -->
-<!--     <node pkg="topic_tools" type="relay" args="/camera/camera_info /camera_rect/camera_info" name="in2in" output="log"/> -->
-
+    <include file="$(find apriltag_ros)/launch/continuous_detection.launch">
+        <arg name="camera_name" value="basler_left"/>
+        <arg name="image_topic" value="image_rect"/>
+    </include>
+    <node pkg="topic_tools" type="relay"
+          args="/$(arg UAV_NAME)/basler_left/camera_info  basler_left/camera_info" name="in2in"/>
+    <node pkg="topic_tools" type="relay" args="/$(arg UAV_NAME)/basler_left/image_rect  basler_left/image_rect"
+          name="im2im"/>
 </launch>

@@ -23,7 +23,7 @@ namespace basler_stereo_driver {
         mrs_lib::ParamLoader pl(nh, NODENAME);
 
         pl.loadParam("UAV_NAME", m_uav_name);
-        pl.loadParam("camera_poses_filename", m_config_filename);
+        pl.loadParam("camera_poses_filename", m_camera_poses_filename);
         pl.loadParam("base_frame_pose", m_name_base);
         pl.loadParam("m_name_CL", m_name_CL);
         pl.loadParam("m_name_CR", m_name_CR);
@@ -31,10 +31,10 @@ namespace basler_stereo_driver {
         pl.loadParam("fleft_tag_det", m_name_fleft_tag_det);
         pl.loadParam("fright_tag_det", m_name_fright_tag_det);
         // stereopair pose parameters
-        auto fleft_rotation = pl.loadMatrixStatic2<3, 3>("fleft_camera/rotation");
-        auto fleft_translation = pl.loadMatrixStatic2<3, 1>("fleft_camera/translation");
+        auto fright_rotation = pl.loadMatrixStatic2<3, 3>("fright_camera/rotation");
+        auto fright_translation = pl.loadMatrixStatic2<3, 1>("fright_camera/translation");
 
-        m_fleft_pose.translate(fleft_translation).rotate(Eigen::Quaterniond{fleft_rotation});
+        m_fleft_pose.translate(fright_translation).rotate(Eigen::Quaterniond{fright_rotation});
 
         if (!pl.loadedSuccessfully()) {
             ROS_ERROR("[%s]: failed to load non-optional parameters!", NODENAME.c_str());
@@ -63,8 +63,8 @@ namespace basler_stereo_driver {
             m_tim_tags_coordinates = nh.createTimer(ros::Duration(m_time_tagcoor),
                                                     &BaslerStereoDriver::m_tim_cbk_tagcoor,
                                                     this);
-            m_tim_find_BL = nh.createTimer(ros::Duration(m_time_transformation),
-                                           &BaslerStereoDriver::m_tim_cbk_find_BL,
+            m_tim_find_BR = nh.createTimer(ros::Duration(m_time_transformation),
+                                           &BaslerStereoDriver::m_tim_cbk_find_BR,
                                            this);
             // | ---------------- subscribers initialize ------------------ |
             m_sub_complete_calibration = nh.subscribe(m_uav_name + "/complete",
@@ -72,9 +72,6 @@ namespace basler_stereo_driver {
                                                       &BaslerStereoDriver::m_cbk_complete_save_calibration,
                                                       this);
         } else {
-            m_tim_mse = nh.createTimer(ros::Duration(0.01),
-                                       &BaslerStereoDriver::m_tim_cbk_tags_errors,
-                                       this);
             // for epipolar lines drawing I'll use subscriber handler
             mrs_lib::SubscribeHandlerOptions shopt{nh};
             shopt.node_name = NODENAME;
@@ -94,7 +91,7 @@ namespace basler_stereo_driver {
             mrs_lib::construct_object(m_handler_camrightinfo,
                                       shopt,
                                       "/" + m_uav_name + "/basler_right/camera_info");
-            // initialize cameras with pinhole modeller
+            // initialize cameras with pinhole model
             while (not(m_handler_camleftinfo.newMsg() and m_handler_camrightinfo.newMsg())) {
                 ROS_WARN_THROTTLE(1.0, "[%s]: waiting for camera info messages", NODENAME.c_str());
             }
@@ -102,18 +99,18 @@ namespace basler_stereo_driver {
         m_tim_collect_images = nh.createTimer(ros::Duration(0.001),
                                               &BaslerStereoDriver::m_tim_cbk_collect_images,
                                               this);
-        m_tim_fleft_pose = nh.createTimer(ros::Duration(0.0001),
-                                          &BaslerStereoDriver::m_tim_cbk_fleft_pose,
-                                          this);
-        // needed
-//        m_sub_camera_fleft = nh.subscribe(m_name_fleft_tag_det,
-//                                          1,
-//                                          &BaslerStereoDriver::m_cbk_tag_detection_fleft,
-//                                          this);
-//        m_sub_camera_fright = nh.subscribe(m_name_fright_tag_det,
-//                                           1,
-//                                           &BaslerStereoDriver::m_cbk_tag_detection_fright,
+//        m_tim_fright_pose = nh.createTimer(ros::Duration(0.001),
+//                                           &BaslerStereoDriver::m_tim_cbk_fright_pose,
 //                                           this);
+        // needed
+        m_sub_camera_fleft = nh.subscribe(m_name_fleft_tag_det,
+                                          1,
+                                          &BaslerStereoDriver::m_cbk_tag_detection_fleft,
+                                          this);
+        m_sub_camera_fright = nh.subscribe(m_name_fright_tag_det,
+                                           1,
+                                           &BaslerStereoDriver::m_cbk_tag_detection_fright,
+                                           this);
         ROS_INFO_ONCE("[%s]: initialized", NODENAME.c_str());
         m_is_initialized = true;
     }
@@ -148,29 +145,32 @@ namespace basler_stereo_driver {
 
     void BaslerStereoDriver::m_cbk_complete_save_calibration(std_msgs::Bool flag) {
         if (not m_is_initialized) return;
-        // if calibration is completed and received flag is True - save all data and close the nodelet
+        if (m_is_calibrated) return;
+        // if pair was not calibrated
+        // calibration is completed and received flag is True - save all data and close the nodelet
         if (flag.data) {
-            std::lock_guard l{m_mut_filtered_CL_pose};
-            std::ofstream fout(m_config_filename);
+            std::lock_guard l{m_mut_calibrated_CR_pose};
+            std::ofstream fout(m_camera_poses_filename);
             Eigen::IOFormat fmt{3, 0, ", ", ",\n", "", "", "[", "]"};
-            fout << "fleft_camera:\n";
+            fout << "fright_camera:\n";
             fout << "\trotation: "
-                 << m_filtered_CL_pose.rotation().format(fmt)
+                 << m_calibrated_CR_pose.rotation().format(fmt)
                  << std::endl;
-            fout << "\ttranslation: " << m_filtered_CL_pose.translation().format(fmt) << std::endl;
+            fout << "\ttranslation: " << m_calibrated_CR_pose.translation().format(fmt) << std::endl;
+            ROS_INFO("[%s]: calibration completed; shutting down", NODENAME.c_str());
             ros::shutdown();
         }
     }
 
 // | --------------------- timer callbacks -------------------- |
 
+    void BaslerStereoDriver::m_tim_cbk_fright_pose([[maybe_unused]] const ros::TimerEvent &ev) {
+        // publish right camera pose (when camera pair is already calibrated)
 
-    void BaslerStereoDriver::m_tim_cbk_fleft_pose([[maybe_unused]] const ros::TimerEvent &ev) {
-        // publish left camera pose (when camera pair is already calibrated)
         if (not m_is_initialized) return;
-        geometry_msgs::TransformStamped fleft_pose_stamped = tf2::eigenToTransform(m_fleft_pose);
+        geometry_msgs::TransformStamped fleft_pose_stamped = tf2::eigenToTransform(m_fright_pose);
         fleft_pose_stamped.header.frame_id = m_name_base;
-        fleft_pose_stamped.child_frame_id = m_name_CL;
+        fleft_pose_stamped.child_frame_id = "pose_right_corrected";
         fleft_pose_stamped.header.stamp = ros::Time::now();
         m_tbroadcaster.sendTransform(fleft_pose_stamped);
     }
@@ -200,23 +200,23 @@ namespace basler_stereo_driver {
             std::lock_guard lock{m_mut_pose_fright};
             for (int i = 0; i < m; ++i) {
                 tf2::fromMsg(m_right_tag_poses[i], row_eigen);
-                src.col(i) = row_eigen;
+                dst.col(i) = row_eigen;
             }
         }
         {
             std::lock_guard lock{m_mut_pose_fleft};
             for (int i = 0; i < m; ++i) {
                 tf2::fromMsg(m_left_tag_poses[i], row_eigen);
-                dst.col(i) = row_eigen;
+                src.col(i) = row_eigen;
             }
         }
         auto transform = Eigen::Affine3d{umeyama(src, dst, false)};
 
-        std::lock_guard lock{m_mut_RL_correction};
-        m_RL_error = transform;
+        std::lock_guard lock{m_mut_LR_correction};
+        m_LR_error = transform;
     }
 
-    void BaslerStereoDriver::m_tim_cbk_find_BL([[maybe_unused]] const ros::TimerEvent &ev) {
+    void BaslerStereoDriver::m_tim_cbk_find_BR([[maybe_unused]] const ros::TimerEvent &ev) {
         // timer callback to publish camera position firstly as uncorrected estimation of a position (from CAD)
         // and then - T_RL_corrected using least-squares solution for two sets of points
         // T - transformation
@@ -240,91 +240,56 @@ namespace basler_stereo_driver {
         }
         ROS_INFO_THROTTLE(2.0, "[%s] transform RL publisher", NODENAME.c_str());
 
-        auto T_BR = m_transformer.getTransform(m_name_CR,
-                                               m_name_base);
+        auto T_BR_original = m_transformer.getTransform(m_name_CR,
+                                                        m_name_base);
         auto T_BL_original = m_transformer.getTransform(m_name_CL,
                                                         m_name_base);
-        geometry_msgs::TransformStamped T_BL_result;
+        geometry_msgs::TransformStamped T_BR_result;
 
-        if (T_BR.has_value() and T_BL_original.has_value()) {
-            std::lock_guard lock{m_mut_RL_correction};
-            auto t_BR_eig = Eigen::Affine3d{tf2::transformToEigen(T_BR->transform)};
-            const auto T_RL = Eigen::Affine3d{tf2::transformToEigen(T_BL_original->transform)} *
-                              t_BR_eig.inverse();
-            const auto T_RL_corrected = m_RL_error.inverse() * T_RL;
-            auto T_BL_corrected = T_RL_corrected * t_BR_eig;
+        if (T_BR_original.has_value() and T_BL_original.has_value()) {
+            std::lock_guard lock{m_mut_LR_correction};
+            const auto T_BR_eig = Eigen::Affine3d{tf2::transformToEigen(T_BR_original->transform)};
+            const auto T_BL_eig = Eigen::Affine3d{tf2::transformToEigen(T_BL_original->transform)};
+            const auto T_LR = T_BR_eig * T_BL_eig.inverse();
+            const auto T_RL_corrected = m_LR_error.inverse() * T_LR;
+            const auto T_BR_corrected = T_RL_corrected * T_BR_eig;
             // make a new frame - pose estimation
-            std::lock_guard l{m_mut_filtered_CL_pose};
+            std::lock_guard l{m_mut_calibrated_CR_pose};
             if (not m_weight) {
-                m_filtered_CL_pose = T_BL_corrected;
+                m_calibrated_CR_pose = T_BR_corrected;
             }
             ++m_weight;
-            T_BL_result = tf2::eigenToTransform(m_interpolate_pose(m_filtered_CL_pose, T_BL_corrected));
-
+            T_BR_result = tf2::eigenToTransform(m_interpolate_pose(m_calibrated_CR_pose, T_BR_corrected));
         } else {
             ROS_ERROR_THROTTLE(2.0, "[%s] wrong transformation from L/R to base", NODENAME.c_str());
         }
-        T_BL_result.header.stamp = ev.current_real;
-        T_BL_result.header.frame_id = m_name_base;
-        T_BL_result.child_frame_id = m_name_CL + "corrected";
+        T_BR_result.header.stamp = ev.current_real;
+        T_BR_result.header.frame_id = m_name_base;
+        T_BR_result.child_frame_id = m_name_CR + "corrected";
 
         for (int i = 0; i < 12; ++i) {
             // find a translation for all tags to compare the result
-            auto L2tag = m_transformer.getTransform(m_name_CL,
-                                                    "basler_left_optical/tag_" + std::to_string(i));
+            auto R2tag = m_transformer.getTransform(m_name_CR,
+                                                    "basler_right_optical/tag_" + std::to_string(i));
 
-            if (L2tag.has_value()) {
-//                auto transform = L2tag.value().inverse().getTransform();
+            if (R2tag.has_value()) {
+//                auto transform = R2tag.value().inverse().getTransform();
                 auto transform = geometry_msgs::TransformStamped{};
                 transform.transform = tf2::eigenToTransform(
-                        Eigen::Affine3d{tf2::transformToEigen(L2tag->transform)}.inverse()).transform;
+                        Eigen::Affine3d{tf2::transformToEigen(R2tag->transform)}.inverse()).transform;
                 transform.header.stamp = ros::Time::now();
-                transform.header.frame_id = m_name_CL + "corrected";
+                transform.header.frame_id = m_name_CR + "corrected";
                 transform.child_frame_id = m_uav_name + "/tag_modified" + std::to_string(i);
                 m_tbroadcaster.sendTransform(transform);
             }
         }
 
-        m_tbroadcaster.sendTransform(T_BL_result);
+        m_tbroadcaster.sendTransform(T_BR_result);
         ROS_INFO_THROTTLE(2.0, "[%s] transform stamped sent from %s to %s time %u",
                           NODENAME.c_str(),
-                          T_BL_result.header.frame_id.c_str(),
-                          T_BL_result.child_frame_id.c_str(),
-                          T_BL_result.header.stamp.nsec);
-    }
-
-    void BaslerStereoDriver::m_tim_cbk_tags_errors([[maybe_unused]] const ros::TimerEvent &ev) {
-        // timer callback to calculate error in euclidean 3d space between tags
-
-        if (not m_is_initialized) return;
-        {
-            std::scoped_lock lck{m_mut_pose_fright, m_mut_pose_fleft};
-            if (m_right_tag_poses.empty() or m_left_tag_poses.empty()) return;
-            if (std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()) > ros::Duration(0.1).toSec()) {
-                ROS_WARN_THROTTLE(1.0,
-                                  "[%s]: tags coordinates timestamps are too far away from each other: %f",
-                                  NODENAME.c_str(),
-                                  std::abs(m_timestamp_fright.toSec() - m_timestamp_fleft.toSec()));
-                return;
-            }
-            ROS_INFO_THROTTLE(1.0, "[%s]: tags timestamps are okay", NODENAME.c_str());
-        }
-        double MSE_res = 0;
-        double MAE_res = 0;
-        for (int i = 0; i < 12; ++i) {
-            // find a translation for all tags to compare the result
-            auto Ltag2Rtag = m_transformer.getTransform("basler_right_optical/tag_" + std::to_string(i),
-                                                        "basler_left_optical/tag_" + std::to_string(i));
-            if (Ltag2Rtag.has_value()) {
-                auto l2r_norm = Eigen::Affine3d{tf2::transformToEigen(Ltag2Rtag->transform)}.translation().norm();
-                MSE_res += std::pow(l2r_norm, 2);
-                MAE_res += l2r_norm;
-            }
-        }
-        ROS_INFO_THROTTLE(2.0, "[%s]: \n\t\t\tMSE == %lf\n\t\t\tMAE == %lf",
-                          NODENAME.c_str(),
-                          MSE_res / 12.0,
-                          MAE_res / 12.0);
+                          T_BR_result.header.frame_id.c_str(),
+                          T_BR_result.child_frame_id.c_str(),
+                          T_BR_result.header.stamp.nsec);
     }
 
     //############################################################

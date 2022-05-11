@@ -97,16 +97,16 @@ namespace basler_stereo_driver {
         ros::Time m_timestamp_fright{0};
         std::mutex m_mut_pose_fright;
 
-        Eigen::Affine3d m_RL_error = Eigen::Affine3d::Identity();
-        std::mutex m_mut_RL_correction;
+        Eigen::Affine3d m_LR_error = Eigen::Affine3d::Identity();
+        std::mutex m_mut_LR_correction;
 
         /* pose filter data */
         size_t m_weight{0};
-        std::mutex m_mut_filtered_CL_pose;
-        Eigen::Affine3d m_filtered_CL_pose;
+        std::mutex m_mut_calibrated_CR_pose;
+        Eigen::Affine3d m_calibrated_CR_pose;
 
         /* other parameters */
-        std::string m_config_filename;
+        std::string m_camera_poses_filename;
 
         /* fleft camera pose */
         Eigen::Affine3d m_fleft_pose = Eigen::Affine3d::Identity();
@@ -126,20 +126,18 @@ namespace basler_stereo_driver {
         // collect images and publish them together
 
         ros::Timer m_tim_collect_images;
-        ros::Timer m_tim_find_BL;
+        ros::Timer m_tim_find_BR;
         ros::Timer m_tim_tags_coordinates;
-        ros::Timer m_tim_fleft_pose;
+        ros::Timer m_tim_fright_pose;
         ros::Timer m_tim_mse;
 
         void m_tim_cbk_collect_images(const ros::TimerEvent &ev);
 
-        void m_tim_cbk_find_BL(const ros::TimerEvent &ev);
+        void m_tim_cbk_find_BR(const ros::TimerEvent &ev);
 
         void m_tim_cbk_tagcoor(const ros::TimerEvent &ev);
 
-        void m_tim_cbk_fleft_pose(const ros::TimerEvent &ev);
-
-        void m_tim_cbk_tags_errors(const ros::TimerEvent &ev);
+        void m_tim_cbk_fright_pose(const ros::TimerEvent &ev);
 
         // | ----------------------- publishers ----------------------- |
         ros::Publisher m_pub_multiview;
