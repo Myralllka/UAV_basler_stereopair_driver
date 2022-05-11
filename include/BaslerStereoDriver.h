@@ -109,8 +109,8 @@ namespace basler_stereo_driver {
         std::string m_camera_poses_filename;
 
         /* fleft camera pose */
-        Eigen::Affine3d m_fleft_pose = Eigen::Affine3d::Identity();
-        Eigen::Affine3d m_fright_pose;
+        Eigen::Affine3d m_fleft_pose;
+        Eigen::Affine3d m_fright_pose = Eigen::Affine3d::Identity();
         // | --------------------- MRS transformer -------------------- |
 
         mrs_lib::Transformer m_transformer;

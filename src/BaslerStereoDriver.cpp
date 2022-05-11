@@ -34,7 +34,7 @@ namespace basler_stereo_driver {
         auto fright_rotation = pl.loadMatrixStatic2<3, 3>("fright_camera/rotation");
         auto fright_translation = pl.loadMatrixStatic2<3, 1>("fright_camera/translation");
 
-        m_fleft_pose.translate(fright_translation).rotate(Eigen::Quaterniond{fright_rotation});
+        m_fright_pose.translate(fright_translation).rotate(Eigen::Quaterniond{fright_rotation});
 
         if (!pl.loadedSuccessfully()) {
             ROS_ERROR("[%s]: failed to load non-optional parameters!", NODENAME.c_str());
@@ -57,7 +57,6 @@ namespace basler_stereo_driver {
         // so different subscribers are also initialized here
 
         ROS_INFO_ONCE("[%s] timers initialisation", NODENAME.c_str());
-
         // If pair is calibrated - publish the pose as already calibrated parameter
         if (not m_is_calibrated) {
             m_tim_tags_coordinates = nh.createTimer(ros::Duration(m_time_tagcoor),
@@ -72,6 +71,9 @@ namespace basler_stereo_driver {
                                                       &BaslerStereoDriver::m_cbk_complete_save_calibration,
                                                       this);
         } else {
+            m_tim_fright_pose = nh.createTimer(ros::Duration(0.001),
+                                               &BaslerStereoDriver::m_tim_cbk_fright_pose,
+                                               this);
             // for epipolar lines drawing I'll use subscriber handler
             mrs_lib::SubscribeHandlerOptions shopt{nh};
             shopt.node_name = NODENAME;
@@ -96,12 +98,9 @@ namespace basler_stereo_driver {
                 ROS_WARN_THROTTLE(1.0, "[%s]: waiting for camera info messages", NODENAME.c_str());
             }
         }
-        m_tim_collect_images = nh.createTimer(ros::Duration(0.001),
-                                              &BaslerStereoDriver::m_tim_cbk_collect_images,
-                                              this);
-//        m_tim_fright_pose = nh.createTimer(ros::Duration(0.001),
-//                                           &BaslerStereoDriver::m_tim_cbk_fright_pose,
-//                                           this);
+//        m_tim_collect_images = nh.createTimer(ros::Duration(0.001),
+//                                              &BaslerStereoDriver::m_tim_cbk_collect_images,
+//                                              this);
         // needed
         m_sub_camera_fleft = nh.subscribe(m_name_fleft_tag_det,
                                           1,
@@ -153,10 +152,10 @@ namespace basler_stereo_driver {
             std::ofstream fout(m_camera_poses_filename);
             Eigen::IOFormat fmt{3, 0, ", ", ",\n", "", "", "[", "]"};
             fout << "fright_camera:\n";
-            fout << "\trotation: "
+            fout << "  rotation: "
                  << m_calibrated_CR_pose.rotation().format(fmt)
                  << std::endl;
-            fout << "\ttranslation: " << m_calibrated_CR_pose.translation().format(fmt) << std::endl;
+            fout << "  translation: " << m_calibrated_CR_pose.translation().format(fmt) << std::endl;
             ROS_INFO("[%s]: calibration completed; shutting down", NODENAME.c_str());
             ros::shutdown();
         }
@@ -170,7 +169,7 @@ namespace basler_stereo_driver {
         if (not m_is_initialized) return;
         geometry_msgs::TransformStamped fleft_pose_stamped = tf2::eigenToTransform(m_fright_pose);
         fleft_pose_stamped.header.frame_id = m_name_base;
-        fleft_pose_stamped.child_frame_id = "pose_right_corrected";
+        fleft_pose_stamped.child_frame_id = m_name_CR;
         fleft_pose_stamped.header.stamp = ros::Time::now();
         m_tbroadcaster.sendTransform(fleft_pose_stamped);
     }
@@ -251,8 +250,9 @@ namespace basler_stereo_driver {
             const auto T_BR_eig = Eigen::Affine3d{tf2::transformToEigen(T_BR_original->transform)};
             const auto T_BL_eig = Eigen::Affine3d{tf2::transformToEigen(T_BL_original->transform)};
             const auto T_LR = T_BR_eig * T_BL_eig.inverse();
-            const auto T_RL_corrected = m_LR_error.inverse() * T_LR;
-            const auto T_BR_corrected = T_RL_corrected * T_BR_eig;
+            const auto T_LR_corrected = m_LR_error.inverse() * T_LR;
+//            const auto T_LR_corrected = T_LR;
+            const auto T_BR_corrected = T_LR_corrected * T_BL_eig;
             // make a new frame - pose estimation
             std::lock_guard l{m_mut_calibrated_CR_pose};
             if (not m_weight) {
@@ -265,7 +265,7 @@ namespace basler_stereo_driver {
         }
         T_BR_result.header.stamp = ev.current_real;
         T_BR_result.header.frame_id = m_name_base;
-        T_BR_result.child_frame_id = m_name_CR + "corrected";
+        T_BR_result.child_frame_id = m_name_CR + "_corrected";
 
         for (int i = 0; i < 12; ++i) {
             // find a translation for all tags to compare the result
@@ -278,7 +278,7 @@ namespace basler_stereo_driver {
                 transform.transform = tf2::eigenToTransform(
                         Eigen::Affine3d{tf2::transformToEigen(R2tag->transform)}.inverse()).transform;
                 transform.header.stamp = ros::Time::now();
-                transform.header.frame_id = m_name_CR + "corrected";
+                transform.header.frame_id = m_name_CR + "_corrected";
                 transform.child_frame_id = m_uav_name + "/tag_modified" + std::to_string(i);
                 m_tbroadcaster.sendTransform(transform);
             }
