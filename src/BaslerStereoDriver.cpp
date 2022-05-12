@@ -47,6 +47,7 @@ namespace basler_stereo_driver {
 
         // | ----------------- publishers initialize ------------------ |
         m_pub_multiview = nh.advertise<mrs_msgs::ImageLabeledArray>("multiview_labeled", 1);
+        m_pub_imdebug = nh.advertise<sensor_msgs::Image>("basler_driver_imdebug", 1);
         // | ---------------- subscribers initialize ------------------ |
 
         // | --------------------- tf transformer --------------------- |
@@ -219,7 +220,7 @@ namespace basler_stereo_driver {
                 }
             }
             const auto td_pts = make_3d_apriltag_points(left_pts);
-            std::cout << "good\n";
+            
         }
     }
 

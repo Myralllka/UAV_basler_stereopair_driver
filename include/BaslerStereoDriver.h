@@ -63,6 +63,8 @@ namespace basler_stereo_driver {
 
     constexpr float APTAG_SIZE = 0.055;
     constexpr float PADD_SIZE = 0.0135;
+//    constexpr float APTAG_SIZE = 100;
+//    constexpr float PADD_SIZE = 20;
     constexpr float APTAG_PADD_SIZE = APTAG_SIZE + PADD_SIZE;
 
 
@@ -82,28 +84,24 @@ namespace basler_stereo_driver {
         std::vector<cv::Point3f> res;
         res.reserve(in_pts.size());
         float x, y;
-        for (const auto &in_pt : in_pts) {
+        for (const auto &in_pt: in_pts) {
             size_t j = in_pt.id;
             switch (in_pt.type) {
                 case (LEFTUP):
-                    x = APTAG_PADD_SIZE * static_cast<float>((j / 4) % 3);
-                    y = APTAG_PADD_SIZE * static_cast<float>((j / 4) % 4);
+                    x = APTAG_PADD_SIZE * static_cast<float>((j % 3));
+                    y = APTAG_PADD_SIZE * static_cast<float>((j / 3));
                     break;
                 case (RIGHTUP):
-                    x = PADD_SIZE * static_cast<float>(j / 4) +
-                        APTAG_SIZE * static_cast<float>((j / 4) % 3);
-                    y = APTAG_PADD_SIZE * static_cast<float>((j / 4) % 4);
+                    x = APTAG_SIZE + APTAG_PADD_SIZE * static_cast<float>((j % 3));
+                    y = APTAG_PADD_SIZE * static_cast<float>((j / 3));
                     break;
                 case (RIGHTBOTTOM):
-                    x = PADD_SIZE * static_cast<float>(j / 4) +
-                        APTAG_SIZE * static_cast<float>((j / 4 + 1) % 3);
-                    y = PADD_SIZE * static_cast<float>(j / 4) +
-                        APTAG_SIZE * static_cast<float>((j / 4 + 1) % 4);
+                    x = APTAG_SIZE + APTAG_PADD_SIZE * static_cast<float>((j % 3));
+                    y = APTAG_SIZE + APTAG_PADD_SIZE * static_cast<float>((j / 3));
                     break;
                 case (LEFTBOTTOM):
-                    x = APTAG_PADD_SIZE * static_cast<float>((j / 4) % 3);
-                    y = PADD_SIZE * static_cast<float>(j / 4) +
-                        APTAG_SIZE * static_cast<float>((j / 4) % 4);
+                    x = APTAG_PADD_SIZE * static_cast<float>((j % 3));
+                    y = APTAG_SIZE + APTAG_PADD_SIZE * static_cast<float>((j / 3));
                     break;
                 default:
                     ROS_ERROR("corner point convertor: wrong point type");
@@ -208,6 +206,8 @@ namespace basler_stereo_driver {
 
         // | ----------------------- publishers ----------------------- |
         ros::Publisher m_pub_multiview;
+        ros::Publisher m_pub_imdebug;
+
 
         // | ----------------------- subscribers ---------------------- |
         ros::Subscriber m_sub_camera_fleft;
