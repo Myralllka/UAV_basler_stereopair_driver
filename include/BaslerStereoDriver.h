@@ -28,6 +28,8 @@
 #include <nav_msgs/Odometry.h>
 #include <tf2_ros/transform_broadcaster.h>
 #include <apriltag_ros/AprilTagDetectionArray.h>
+#include <apriltag_ros/PointLabeledArray.h>
+#include <apriltag_ros/PointLabeled.h>
 #include <sensor_msgs/image_encodings.h>
 #include <sensor_msgs/Image.h>
 #include <std_msgs/builtin_bool.h>
@@ -41,11 +43,9 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui.hpp>
-//#include <opencv2/calib3d.hpp>
-//#include <opencv2/features2d.hpp>
-//#include <opencv2/highgui/highgui.hpp>
-//#include <opencv2/core/eigen.hpp>
-
+#include <opencv2/calib3d.hpp>
+#include <opencv2/calib3d/calib3d.hpp>
+#include <opencv2/core/eigen.hpp>
 /* user includes */
 
 //}
@@ -53,6 +53,66 @@
 /// Returns the 3D cross product Skew symmetric matrix of a given 3D vector.
 // source: https://github.com/ethz-asl/ethzasl_msf/blob/5d916120c3e4df5b1ea136c2516c6ad1e3f9bf78/msf_core/include/msf_core/eigen_utils.h#L28
 namespace basler_stereo_driver {
+    enum {
+        // from PointLabeled message
+        LEFTUP = 1,
+        RIGHTUP = 2,
+        RIGHTBOTTOM = 3,
+        LEFTBOTTOM = 4
+    };
+
+    constexpr float APTAG_SIZE = 0.055;
+    constexpr float PADD_SIZE = 0.0135;
+    constexpr float APTAG_PADD_SIZE = APTAG_SIZE + PADD_SIZE;
+
+
+    cv::Mat f2K33(const boost::array<double, 12> &P_in) {
+        // transform a K matrix from CameraInfo (boost array) to CvMat
+        Eigen::Matrix3d K_out = Eigen::Matrix3d::Identity();
+        cv::Mat K_out_cv;
+        K_out(0, 0) = P_in[0];
+        K_out(0, 2) = P_in[2];
+        K_out(1, 1) = P_in[5];
+        K_out(1, 2) = P_in[6];
+        cv::eigen2cv(K_out, K_out_cv);
+        return K_out_cv;
+    }
+
+    std::vector<cv::Point3f> make_3d_apriltag_points(const std::vector<apriltag_ros::PointLabeled> &in_pts) {
+        std::vector<cv::Point3f> res;
+        res.reserve(in_pts.size());
+        float x, y;
+        for (const auto &in_pt : in_pts) {
+            size_t j = in_pt.id;
+            switch (in_pt.type) {
+                case (LEFTUP):
+                    x = APTAG_PADD_SIZE * static_cast<float>((j / 4) % 3);
+                    y = APTAG_PADD_SIZE * static_cast<float>((j / 4) % 4);
+                    break;
+                case (RIGHTUP):
+                    x = PADD_SIZE * static_cast<float>(j / 4) +
+                        APTAG_SIZE * static_cast<float>((j / 4) % 3);
+                    y = APTAG_PADD_SIZE * static_cast<float>((j / 4) % 4);
+                    break;
+                case (RIGHTBOTTOM):
+                    x = PADD_SIZE * static_cast<float>(j / 4) +
+                        APTAG_SIZE * static_cast<float>((j / 4 + 1) % 3);
+                    y = PADD_SIZE * static_cast<float>(j / 4) +
+                        APTAG_SIZE * static_cast<float>((j / 4 + 1) % 4);
+                    break;
+                case (LEFTBOTTOM):
+                    x = APTAG_PADD_SIZE * static_cast<float>((j / 4) % 3);
+                    y = PADD_SIZE * static_cast<float>(j / 4) +
+                        APTAG_SIZE * static_cast<float>((j / 4) % 4);
+                    break;
+                default:
+                    ROS_ERROR("corner point convertor: wrong point type");
+                    break;
+            }
+            res.emplace_back(x, y, 0);
+        }
+        return res;
+    }
 
 /* class BaslerStereoDriver //{ */
     class BaslerStereoDriver : public nodelet::Nodelet {
@@ -67,6 +127,9 @@ namespace basler_stereo_driver {
         /* flags */
         bool m_is_initialized = false;
         bool m_is_calibrated = false;
+
+        // if camera is not calibrated - what is the calibration algorithm
+        std::string m_calib_algo;
 
         /* ros parameters */
         std::string m_uav_name;
@@ -111,6 +174,7 @@ namespace basler_stereo_driver {
         /* fleft camera pose */
         Eigen::Affine3d m_fleft_pose;
         Eigen::Affine3d m_fright_pose = Eigen::Affine3d::Identity();
+        cv::Mat m_K_CL, m_K_CR;
         // | --------------------- MRS transformer -------------------- |
 
         mrs_lib::Transformer m_transformer;
@@ -126,10 +190,13 @@ namespace basler_stereo_driver {
         // collect images and publish them together
 
         ros::Timer m_tim_collect_images;
+        ros::Timer m_tim_tag_corners;
         ros::Timer m_tim_find_BR;
         ros::Timer m_tim_tags_coordinates;
         ros::Timer m_tim_fright_pose;
         ros::Timer m_tim_mse;
+
+        void m_tim_cbk_corners(const ros::TimerEvent &ev);
 
         void m_tim_cbk_collect_images(const ros::TimerEvent &ev);
 
@@ -153,6 +220,9 @@ namespace basler_stereo_driver {
 
         mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo> m_handler_camleftinfo;
         mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo> m_handler_camrightinfo;
+
+        mrs_lib::SubscribeHandler<apriltag_ros::PointLabeledArray> m_handler_cornersfleft;
+        mrs_lib::SubscribeHandler<apriltag_ros::PointLabeledArray> m_handler_cornersfright;
 
         // | --------------------- other functions -------------------- |
 

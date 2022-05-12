@@ -22,4 +22,4 @@ windows:
   - basler_stereo_driver:
       layout: tiled
       panes:
-        - waitForRos; roslaunch basler_stereopair_driver basler_stereopair_driver.launch is_calibrated:=false
+        - waitForRos; roslaunch basler_stereopair_driver basler_stereopair_driver.launch is_calibrated:=false calib_algo:="PnP"

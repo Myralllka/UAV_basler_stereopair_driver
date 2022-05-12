@@ -28,6 +28,7 @@ namespace basler_stereo_driver {
         pl.loadParam("m_name_CL", m_name_CL);
         pl.loadParam("m_name_CR", m_name_CR);
         pl.loadParam("is_calibrated", m_is_calibrated);
+        pl.loadParam("calib_algo", m_calib_algo);
         pl.loadParam("fleft_tag_det", m_name_fleft_tag_det);
         pl.loadParam("fright_tag_det", m_name_fright_tag_det);
         // stereopair pose parameters
@@ -58,14 +59,36 @@ namespace basler_stereo_driver {
 
         ROS_INFO_ONCE("[%s] timers initialisation", NODENAME.c_str());
         // If pair is calibrated - publish the pose as already calibrated parameter
+        mrs_lib::SubscribeHandlerOptions shopt{nh};
+        shopt.node_name = NODENAME;
+        shopt.threadsafe = true;
+        shopt.no_message_timeout = ros::Duration(1.0);
         if (not m_is_calibrated) {
-            m_tim_tags_coordinates = nh.createTimer(ros::Duration(m_time_tagcoor),
-                                                    &BaslerStereoDriver::m_tim_cbk_tagcoor,
-                                                    this);
-            m_tim_find_BR = nh.createTimer(ros::Duration(m_time_transformation),
-                                           &BaslerStereoDriver::m_tim_cbk_find_BR,
-                                           this);
-            // | ---------------- subscribers initialize ------------------ |
+            if (m_calib_algo == "PnP") {
+                ROS_INFO("[%s]: PnP method calibration!", NODENAME.c_str());
+                mrs_lib::construct_object(m_handler_cornersfleft,
+                                          shopt,
+                                          "/" + m_uav_name + "/fleft/corners");
+                mrs_lib::construct_object(m_handler_cornersfright,
+                                          shopt,
+                                          "/" + m_uav_name + "/fright/corners");
+
+                m_tim_tag_corners = nh.createTimer(ros::Duration(m_time_tagcoor),
+                                                   &BaslerStereoDriver::m_tim_cbk_corners,
+                                                   this);
+            } else if (m_calib_algo == "3d") {
+                ROS_INFO("[%s]: 3d apriltags method calibration!", NODENAME.c_str());
+                m_tim_tags_coordinates = nh.createTimer(ros::Duration(m_time_tagcoor),
+                                                        &BaslerStereoDriver::m_tim_cbk_tagcoor,
+                                                        this);
+                m_tim_find_BR = nh.createTimer(ros::Duration(m_time_transformation),
+                                               &BaslerStereoDriver::m_tim_cbk_find_BR,
+                                               this);
+            } else {
+                ROS_ERROR("[%s]: unknown or unimplemented stereopair calibration algorithm. shutting down",
+                          NODENAME.c_str());
+                ros::shutdown();
+            }
             m_sub_complete_calibration = nh.subscribe(m_uav_name + "/complete",
                                                       1,
                                                       &BaslerStereoDriver::m_cbk_complete_save_calibration,
@@ -75,10 +98,6 @@ namespace basler_stereo_driver {
                                                &BaslerStereoDriver::m_tim_cbk_fright_pose,
                                                this);
             // for epipolar lines drawing I'll use subscriber handler
-            mrs_lib::SubscribeHandlerOptions shopt{nh};
-            shopt.node_name = NODENAME;
-            shopt.threadsafe = true;
-            shopt.no_message_timeout = ros::Duration(1.0);
             mrs_lib::construct_object(m_handler_imleft,
                                       shopt,
                                       "/" + m_uav_name + "/fleft/tag_detections_image");
@@ -98,6 +117,7 @@ namespace basler_stereo_driver {
                 ROS_WARN_THROTTLE(1.0, "[%s]: waiting for camera info messages", NODENAME.c_str());
             }
         }
+        // TODO: repair
 //        m_tim_collect_images = nh.createTimer(ros::Duration(0.001),
 //                                              &BaslerStereoDriver::m_tim_cbk_collect_images,
 //                                              this);
@@ -123,7 +143,7 @@ namespace basler_stereo_driver {
         if (res.has_value()) {
             m_right_tag_poses = res.value();
             m_timestamp_fright = msg->header.stamp;
-            ROS_INFO_THROTTLE(2.0, "[%s]: right camera tags detection cbk complete", NODENAME.c_str());
+//            ROS_INFO_THROTTLE(2.0, "[%s]: right camera tags detection cbk complete", NODENAME.c_str());
         } else {
             ROS_WARN_THROTTLE(2.0, "[%s]: right camera cnk not completed", NODENAME.c_str());
         }
@@ -136,7 +156,7 @@ namespace basler_stereo_driver {
         if (res.has_value()) {
             m_left_tag_poses = res.value();
             m_timestamp_fleft = msg->header.stamp;
-            ROS_INFO_THROTTLE(2.0, "[%s]: left camera tags detection cbk complete", NODENAME.c_str());
+//            ROS_INFO_THROTTLE(2.0, "[%s]: left camera tags detection cbk complete", NODENAME.c_str());
         } else {
             ROS_WARN_THROTTLE(2.0, "[%s]: left camera cnk not completed", NODENAME.c_str());
         }
@@ -163,9 +183,49 @@ namespace basler_stereo_driver {
 
 // | --------------------- timer callbacks -------------------- |
 
+    void BaslerStereoDriver::m_tim_cbk_corners([[maybe_unused]]const ros::TimerEvent &ev) {
+        if (not m_is_initialized) return;
+        if (m_handler_cornersfright.newMsg() and m_handler_cornersfleft.newMsg()) {
+            auto left = m_handler_cornersfleft.getMsg().get();
+            auto right = m_handler_cornersfright.getMsg().get();
+            std::vector<cv::Point2f> pts_left, pts_right;
+            if (left->detections.empty() or right->detections.empty()) {
+                ROS_WARN_THROTTLE(1.0,
+                                  "[%s]: calibration from corners: no tags seen from left or right camera",
+                                  NODENAME.c_str());
+                return;
+            }
+            if (left->detections.size() != right->detections.size()) {
+                ROS_WARN_THROTTLE(1.0,
+                                  "[%s]: calibration from corners: not the same tags are visible from left and right camera",
+                                  NODENAME.c_str());
+                return;
+            }
+
+            auto left_pts = left->detections;
+            auto right_pts = right->detections;
+
+            auto f = [](const auto &x, const auto &y) -> bool { return x.id == y.id ? x.type < y.type : x.id < y.id; };
+
+            std::sort(left_pts.begin(), left_pts.end(), f);
+            std::sort(right_pts.begin(), right_pts.end(), f);
+            for (size_t i = 0; i < left_pts.size(); ++i) {
+                if ((left_pts[i].id != right_pts[i].id) or
+                    (left_pts[i].type != right_pts[i].type)) {
+                    ROS_WARN_THROTTLE(1.0,
+                                      "[%s]: calibration from corners: something went wrong",
+                                      NODENAME.c_str());
+                    return;
+                }
+            }
+            const auto td_pts = make_3d_apriltag_points(left_pts);
+            std::cout << "good\n";
+        }
+    }
+
+
     void BaslerStereoDriver::m_tim_cbk_fright_pose([[maybe_unused]] const ros::TimerEvent &ev) {
         // publish right camera pose (when camera pair is already calibrated)
-
         if (not m_is_initialized) return;
         geometry_msgs::TransformStamped fleft_pose_stamped = tf2::eigenToTransform(m_fright_pose);
         fleft_pose_stamped.header.frame_id = m_name_base;
@@ -332,10 +392,6 @@ namespace basler_stereo_driver {
         for (const auto &el: poses_base_frame) {
             result.push_back(el.pose.pose.position);
         }
-        ROS_INFO_THROTTLE(2.0, "[%s]: %s camera tags detection cbk complete",
-                          NODENAME.c_str(),
-                          camera_name.c_str());
-
         return result;
     }
 
