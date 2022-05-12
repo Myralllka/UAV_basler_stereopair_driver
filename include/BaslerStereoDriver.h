@@ -61,12 +61,33 @@ namespace basler_stereo_driver {
         LEFTBOTTOM = 4
     };
 
-    constexpr float APTAG_SIZE = 0.055;
-    constexpr float PADD_SIZE = 0.0135;
-//    constexpr float APTAG_SIZE = 100;
-//    constexpr float PADD_SIZE = 20;
-    constexpr float APTAG_PADD_SIZE = APTAG_SIZE + PADD_SIZE;
+    constexpr double APTAG_SIZE = 0.055;
+    constexpr double PADD_SIZE = 0.0135;
+    constexpr double APTAG_PADD_SIZE = APTAG_SIZE + PADD_SIZE;
 
+    void cam2Rt(const std::vector<cv::Point3d> &td_pts,
+                const std::vector<cv::Point2d> &im_pts,
+                const cv::Matx<double, 3, 3> &K,
+                const cv::Mat &d,
+                Eigen::Matrix3d &R,
+                Eigen::Matrix<double, 3, 1> &t) {
+        cv::Mat R_cv;
+        cv::Mat t_cv, r_cv;
+        try {
+            cv::solvePnP(td_pts,
+                         im_pts,
+                         K,
+                         d,
+                         r_cv,
+                         t_cv,
+                         false);
+            cv::Rodrigues(r_cv, R_cv);
+            cv::cv2eigen(R_cv, R);
+            cv::cv2eigen(t_cv, t);
+        } catch (cv::Exception &e) {
+            std::cout << e.what() << std::endl;
+        }
+    }
 
     cv::Mat f2K33(const boost::array<double, 12> &P_in) {
         // transform a K matrix from CameraInfo (boost array) to CvMat
@@ -80,28 +101,28 @@ namespace basler_stereo_driver {
         return K_out_cv;
     }
 
-    std::vector<cv::Point3f> make_3d_apriltag_points(const std::vector<apriltag_ros::PointLabeled> &in_pts) {
-        std::vector<cv::Point3f> res;
+    std::vector<cv::Point3d> make_3d_apriltag_points(const std::vector<apriltag_ros::PointLabeled> &in_pts) {
+        std::vector<cv::Point3d> res;
         res.reserve(in_pts.size());
-        float x, y;
+        double x, y;
         for (const auto &in_pt: in_pts) {
             size_t j = in_pt.id;
             switch (in_pt.type) {
                 case (LEFTUP):
-                    x = APTAG_PADD_SIZE * static_cast<float>((j % 3));
-                    y = APTAG_PADD_SIZE * static_cast<float>((j / 3));
+                    x = APTAG_PADD_SIZE * static_cast<double>((j % 3));
+                    y = APTAG_PADD_SIZE * static_cast<double>((j / 3));
                     break;
                 case (RIGHTUP):
-                    x = APTAG_SIZE + APTAG_PADD_SIZE * static_cast<float>((j % 3));
-                    y = APTAG_PADD_SIZE * static_cast<float>((j / 3));
+                    x = APTAG_SIZE + APTAG_PADD_SIZE * static_cast<double>((j % 3));
+                    y = APTAG_PADD_SIZE * static_cast<double>((j / 3));
                     break;
                 case (RIGHTBOTTOM):
-                    x = APTAG_SIZE + APTAG_PADD_SIZE * static_cast<float>((j % 3));
-                    y = APTAG_SIZE + APTAG_PADD_SIZE * static_cast<float>((j / 3));
+                    x = APTAG_SIZE + APTAG_PADD_SIZE * static_cast<double>((j % 3));
+                    y = APTAG_SIZE + APTAG_PADD_SIZE * static_cast<double>((j / 3));
                     break;
                 case (LEFTBOTTOM):
-                    x = APTAG_PADD_SIZE * static_cast<float>((j % 3));
-                    y = APTAG_SIZE + APTAG_PADD_SIZE * static_cast<float>((j / 3));
+                    x = APTAG_PADD_SIZE * static_cast<double>((j % 3));
+                    y = APTAG_SIZE + APTAG_PADD_SIZE * static_cast<double>((j / 3));
                     break;
                 default:
                     ROS_ERROR("corner point convertor: wrong point type");
@@ -168,6 +189,8 @@ namespace basler_stereo_driver {
 
         /* other parameters */
         std::string m_camera_poses_filename;
+        image_geometry::PinholeCameraModel m_camera_left;
+        image_geometry::PinholeCameraModel m_camera_right;
 
         /* fleft camera pose */
         Eigen::Affine3d m_fleft_pose;

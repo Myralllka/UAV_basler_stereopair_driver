@@ -107,17 +107,22 @@ namespace basler_stereo_driver {
                                       shopt,
                                       "/" + m_uav_name + "/fright/tag_detections_image");
 //                                      "/" + m_uav_name + "/basler_right/image_rect");
-            mrs_lib::construct_object(m_handler_camleftinfo,
-                                      shopt,
-                                      "/" + m_uav_name + "/basler_left/camera_info");
-            mrs_lib::construct_object(m_handler_camrightinfo,
-                                      shopt,
-                                      "/" + m_uav_name + "/basler_right/camera_info");
-            // initialize cameras with pinhole model
-            while (not(m_handler_camleftinfo.newMsg() and m_handler_camrightinfo.newMsg())) {
-                ROS_WARN_THROTTLE(1.0, "[%s]: waiting for camera info messages", NODENAME.c_str());
-            }
         }
+        mrs_lib::construct_object(m_handler_camleftinfo,
+                                  shopt,
+                                  "/" + m_uav_name + "/basler_left/camera_info");
+        mrs_lib::construct_object(m_handler_camrightinfo,
+                                  shopt,
+                                  "/" + m_uav_name + "/basler_right/camera_info");
+        // initialize cameras with pinhole model
+        while (not(m_handler_camleftinfo.newMsg() and m_handler_camrightinfo.newMsg())) {
+            ROS_WARN_THROTTLE(1.0, "[%s]: waiting for camera info messages", NODENAME.c_str());
+        }
+        m_camera_right.fromCameraInfo(m_handler_camrightinfo.getMsg());
+        m_camera_left.fromCameraInfo(m_handler_camleftinfo.getMsg());
+        ros::Duration(0.1).sleep();
+        m_K_CL = f2K33(m_handler_camleftinfo.getMsg().get()->P);
+        m_K_CR = f2K33(m_handler_camrightinfo.getMsg().get()->P);
         // TODO: repair
 //        m_tim_collect_images = nh.createTimer(ros::Duration(0.001),
 //                                              &BaslerStereoDriver::m_tim_cbk_collect_images,
@@ -189,7 +194,8 @@ namespace basler_stereo_driver {
         if (m_handler_cornersfright.newMsg() and m_handler_cornersfleft.newMsg()) {
             auto left = m_handler_cornersfleft.getMsg().get();
             auto right = m_handler_cornersfright.getMsg().get();
-            std::vector<cv::Point2f> pts_left, pts_right;
+            std::vector<cv::Point2d> pts_left, pts_right;
+
             if (left->detections.empty() or right->detections.empty()) {
                 ROS_WARN_THROTTLE(1.0,
                                   "[%s]: calibration from corners: no tags seen from left or right camera",
@@ -203,24 +209,55 @@ namespace basler_stereo_driver {
                 return;
             }
 
-            auto left_pts = left->detections;
-            auto right_pts = right->detections;
-
+            auto left_detections = left->detections;
+            auto right_detections = right->detections;
+            pts_left.reserve(left_detections.size());
+            pts_right.reserve(right_detections.size());
             auto f = [](const auto &x, const auto &y) -> bool { return x.id == y.id ? x.type < y.type : x.id < y.id; };
 
-            std::sort(left_pts.begin(), left_pts.end(), f);
-            std::sort(right_pts.begin(), right_pts.end(), f);
-            for (size_t i = 0; i < left_pts.size(); ++i) {
-                if ((left_pts[i].id != right_pts[i].id) or
-                    (left_pts[i].type != right_pts[i].type)) {
+            std::sort(left_detections.begin(), left_detections.end(), f);
+            std::sort(right_detections.begin(), right_detections.end(), f);
+            for (size_t i = 0; i < left_detections.size(); ++i) {
+                if ((left_detections[i].id != right_detections[i].id) or
+                    (left_detections[i].type != right_detections[i].type)) {
                     ROS_WARN_THROTTLE(1.0,
                                       "[%s]: calibration from corners: something went wrong",
                                       NODENAME.c_str());
                     return;
                 }
+                pts_left.emplace_back(left_detections[i].x, left_detections[i].y);
+                pts_right.emplace_back(right_detections[i].x, right_detections[i].y);
             }
-            const auto td_pts = make_3d_apriltag_points(left_pts);
-            
+            std::vector<cv::Point3d> td_pts = make_3d_apriltag_points(left_detections);
+            Eigen::Matrix3d R1, R2;
+            Eigen::Matrix<double, 3, 1> t1, t2;
+            std::cout << m_camera_left.intrinsicMatrix() << std::endl << m_camera_left.distortionCoeffs() << std::endl;
+            cam2Rt(td_pts,
+                   pts_left,
+                   m_K_CL,
+                   m_camera_left.distortionCoeffs(),
+                   R1,
+                   t1);
+            Eigen::Affine3d mat = Eigen::Affine3d::Identity();
+            mat.translate(t1).rotate(R1);
+            geometry_msgs::TransformStamped transform = tf2::eigenToTransform(mat);
+            transform.header.stamp = ros::Time::now();
+            transform.header.frame_id = m_name_base;
+            transform.child_frame_id = "left_deb";
+            m_tbroadcaster.sendTransform(transform);
+            cam2Rt(td_pts,
+                   pts_right,
+                   m_K_CR,
+                   m_camera_right.distortionCoeffs(),
+                   R2,
+                   t2);
+            mat.translate(t2).rotate(R2);
+            auto transform2 = tf2::eigenToTransform(mat);
+            transform2.header.stamp = ros::Time::now();
+            transform2.header.frame_id = m_name_base;
+            transform2.child_frame_id = "right_deb";
+            m_tbroadcaster.sendTransform(transform2);
+            std::cout << "yeah" << std::endl;
         }
     }
 
