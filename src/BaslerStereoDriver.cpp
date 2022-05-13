@@ -31,11 +31,6 @@ namespace basler_stereo_driver {
         pl.loadParam("calib_algo", m_calib_algo);
         pl.loadParam("fleft_tag_det", m_name_fleft_tag_det);
         pl.loadParam("fright_tag_det", m_name_fright_tag_det);
-        // stereopair pose parameters
-        auto fright_rotation = pl.loadMatrixStatic2<3, 3>("fright_camera/rotation");
-        auto fright_translation = pl.loadMatrixStatic2<3, 1>("fright_camera/translation");
-
-        m_fright_pose.translate(fright_translation).rotate(Eigen::Quaterniond{fright_rotation});
 
         if (!pl.loadedSuccessfully()) {
             ROS_ERROR("[%s]: failed to load non-optional parameters!", NODENAME.c_str());
@@ -64,7 +59,23 @@ namespace basler_stereo_driver {
         shopt.node_name = NODENAME;
         shopt.threadsafe = true;
         shopt.no_message_timeout = ros::Duration(1.0);
+
         if (not m_is_calibrated) {
+            ros::Duration(1).sleep();
+            auto fright_pose_opt = m_transformer.getTransform(m_name_base, m_name_CR);
+            if (fright_pose_opt.has_value()) {
+                m_fright_pose = Eigen::Affine3d{tf2::transformToEigen(fright_pose_opt->transform)};
+            } else {
+                ROS_ERROR("fuck");
+                ros::shutdown();
+            }
+            auto fleft_pose_opt = m_transformer.getTransform(m_name_base, m_name_CL);
+            if (fleft_pose_opt.has_value()) {
+                m_fleft_pose = Eigen::Affine3d{tf2::transformToEigen(fleft_pose_opt->transform)};
+            } else {
+                ROS_ERROR("fuck");
+                ros::shutdown();
+            }
             if (m_calib_algo == "PnP") {
                 ROS_INFO("[%s]: PnP method calibration!", NODENAME.c_str());
                 mrs_lib::construct_object(m_handler_cornersfleft,
@@ -95,6 +106,11 @@ namespace basler_stereo_driver {
                                                       &BaslerStereoDriver::m_cbk_complete_save_calibration,
                                                       this);
         } else {
+            // stereopair pose parameters
+            auto fright_rotation = pl.loadMatrixStatic2<3, 3>("fright_camera/rotation");
+            auto fright_translation = pl.loadMatrixStatic2<3, 1>("fright_camera/translation");
+
+            m_fright_pose.translate(fright_translation).rotate(Eigen::Quaterniond{fright_rotation});
             m_tim_fright_pose = nh.createTimer(ros::Duration(0.001),
                                                &BaslerStereoDriver::m_tim_cbk_fright_pose,
                                                this);
@@ -191,73 +207,50 @@ namespace basler_stereo_driver {
 
     void BaslerStereoDriver::m_tim_cbk_corners([[maybe_unused]]const ros::TimerEvent &ev) {
         if (not m_is_initialized) return;
-        if (m_handler_cornersfright.newMsg() and m_handler_cornersfleft.newMsg()) {
+        Eigen::Matrix3d R1, R2, R21;
+        Eigen::Matrix<double, 3, 1> t1, t2, t21;
+        if (m_handler_cornersfleft.newMsg() and m_handler_cornersfright.newMsg()) {
             auto left = m_handler_cornersfleft.getMsg().get();
             auto right = m_handler_cornersfright.getMsg().get();
-            std::vector<cv::Point2d> pts_left, pts_right;
-
-            if (left->detections.empty() or right->detections.empty()) {
-                ROS_WARN_THROTTLE(1.0,
-                                  "[%s]: calibration from corners: no tags seen from left or right camera",
-                                  NODENAME.c_str());
+            auto resl = u2RT(left->detections,
+                             m_K_CL,
+                             R1,
+                             t1);
+            auto resr = u2RT(right->detections,
+                             m_K_CR,
+                             R2,
+                             t2);
+            if (not resl) {
+                ROS_WARN("right u2msg error");
                 return;
             }
-            if (left->detections.size() != right->detections.size()) {
-                ROS_WARN_THROTTLE(1.0,
-                                  "[%s]: calibration from corners: not the same tags are visible from left and right camera",
-                                  NODENAME.c_str());
+            if (not resr) {
+                ROS_WARN("left u2msg error");
                 return;
             }
 
-            auto left_detections = left->detections;
-            auto right_detections = right->detections;
-            pts_left.reserve(left_detections.size());
-            pts_right.reserve(right_detections.size());
-            auto f = [](const auto &x, const auto &y) -> bool { return x.id == y.id ? x.type < y.type : x.id < y.id; };
+            R21 = R2 * R1.transpose();
+            std::cout << R1 << std::endl;
+            std::cout << R2 << std::endl;
+            std::cout << R21 << std::endl;
+            t21 = t2 - R21 * t1;
+            Eigen::Affine3d mat1 = Eigen::Affine3d::Identity();
+            mat1.translate(-t1).rotate(R1.transpose());
 
-            std::sort(left_detections.begin(), left_detections.end(), f);
-            std::sort(right_detections.begin(), right_detections.end(), f);
-            for (size_t i = 0; i < left_detections.size(); ++i) {
-                if ((left_detections[i].id != right_detections[i].id) or
-                    (left_detections[i].type != right_detections[i].type)) {
-                    ROS_WARN_THROTTLE(1.0,
-                                      "[%s]: calibration from corners: something went wrong",
-                                      NODENAME.c_str());
-                    return;
-                }
-                pts_left.emplace_back(left_detections[i].x, left_detections[i].y);
-                pts_right.emplace_back(right_detections[i].x, right_detections[i].y);
-            }
-            std::vector<cv::Point3d> td_pts = make_3d_apriltag_points(left_detections);
-            Eigen::Matrix3d R1, R2;
-            Eigen::Matrix<double, 3, 1> t1, t2;
-            std::cout << m_camera_left.intrinsicMatrix() << std::endl << m_camera_left.distortionCoeffs() << std::endl;
-            cam2Rt(td_pts,
-                   pts_left,
-                   m_K_CL,
-                   m_camera_left.distortionCoeffs(),
-                   R1,
-                   t1);
-            Eigen::Affine3d mat = Eigen::Affine3d::Identity();
-            mat.translate(t1).rotate(R1);
-            geometry_msgs::TransformStamped transform = tf2::eigenToTransform(mat);
-            transform.header.stamp = ros::Time::now();
-            transform.header.frame_id = m_name_base;
-            transform.child_frame_id = "left_deb";
-            m_tbroadcaster.sendTransform(transform);
-            cam2Rt(td_pts,
-                   pts_right,
-                   m_K_CR,
-                   m_camera_right.distortionCoeffs(),
-                   R2,
-                   t2);
-            mat.translate(t2).rotate(R2);
-            auto transform2 = tf2::eigenToTransform(mat);
-            transform2.header.stamp = ros::Time::now();
-            transform2.header.frame_id = m_name_base;
-            transform2.child_frame_id = "right_deb";
-            m_tbroadcaster.sendTransform(transform2);
-            std::cout << "yeah" << std::endl;
+            auto res_msg = tf2::eigenToTransform(mat1);
+            res_msg.header.stamp = ros::Time::now();
+            res_msg.header.frame_id = "tag_base";
+//            res_msg.header.frame_id = "uav1/basler_right_optical";
+            res_msg.child_frame_id = "debug";
+
+            m_tbroadcaster.sendTransform(res_msg);
+            auto res_msg3 = tf2::eigenToTransform(mat1.inverse());
+            res_msg3.header.stamp = ros::Time::now();
+            res_msg3.header.frame_id = "tag_base";
+//            res_msg3.header.frame_id = "uav1/basler_left_optical";
+            res_msg3.child_frame_id = "debug3";
+            m_tbroadcaster.sendTransform(res_msg3);
+
         }
     }
 

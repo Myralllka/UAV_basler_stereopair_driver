@@ -47,7 +47,7 @@ include_directories(include
         ${PCL_INCLUDE_DIRS}
         )
 
-add_library(${FILESNAME} src/${FILESNAME}.cpp)
+add_library(${FILESNAME} src/${FILESNAME}.cpp src/Utils.cpp)
 
 add_dependencies(${FILESNAME} ${${FILESNAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 

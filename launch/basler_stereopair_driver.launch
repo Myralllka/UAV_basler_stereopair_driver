@@ -77,6 +77,7 @@
         </node>
 
         <node pkg="tf" type="static_transform_publisher" name="camera1_fleft_pose" args="0.083 0.083 0 -0.653 0.271 -0.271 0.653 $(arg stereopair_base_frame_id) $(arg UAV_NAME)/basler_left_optical 100" />
+        <node pkg="tf" type="static_transform_publisher" name="tagcoor" args="-0.0275 0.0275 0 1 0 0 0 uav1/basler_left_optical/tag_0 tag_base 100" />
         <!-- if stereo pair is not calibrated - publish a static transformation-->
         <node unless="$(arg is_calibrated)" pkg="tf" type="static_transform_publisher" name="camera2_fright_pose" args="0.083 -0.083 0 -0.271 0.653 -0.653 0.271 $(arg stereopair_base_frame_id) $(arg UAV_NAME)/basler_right_optical 100"/>
 
