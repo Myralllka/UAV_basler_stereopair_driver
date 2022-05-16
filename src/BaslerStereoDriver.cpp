@@ -205,6 +205,53 @@ namespace basler_stereo_driver {
 
 // | --------------------- timer callbacks -------------------- |
 
+    bool check_PnP(const std::vector<apriltag_ros::PointLabeled>& detections, const Eigen::Matrix3d& K, const Eigen::Matrix3d& R, const Eigen::Vector3d t)
+    {
+      using vec2d_t = Eigen::Vector2d;
+      using vec3d_t = Eigen::Vector3d;
+      using vec4d_t = Eigen::Vector<double, 4, 1>;
+      using mat3d_t = Eigen::Vector<double, 4, 4>;
+      using mat3x4d_t = Eigen::Vector<double, 3, 4>;
+
+      bool all_ok = true;
+
+      // https://docs.opencv.org/4.2.0/d9/d0c/group__calib3d.html#ga549c2075fac14829ff4a58bc931c033d
+      mat3d_t tf = Eigen::Matrix<double, 4, 4>::Identity();
+      tf.topLeftCorner<3, 3>() = R;
+      tf.col(3).head<3>() = t;
+      const mat3x4d_t mat4d_to_3d= Eigen::Matrix<double, 3, 4>::Identity();
+
+      const std::vector<cv::Point3d> td_pts_cv = make_3d_apriltag_points(detections);
+      std::vector<Eigen::Vector3d> td_pts;
+      std::transform(std::begin(td_pts_cv), std::end(td_pts_cv), std::begin(td_pts), cv::cv2eigen);
+      for (size_t it = 0; it < detections.size(); it++)
+      {
+        const vec3d_t& pt3d = td_pts.at(it);
+        const vec4d_t pt3d_h (pt3d.x(), pt3d.y(), pt3d.z(), 1);
+
+        // transform the 3d point to the camera frame and project it to 2d (in homogeneous coordinates)
+        const vec3d_t pt2d_h = K*mat4d_to_3d*tf*pt3d_h;
+
+        if (std::abs(pt2d_h.z() - 1.0) > 1e-9)
+        {
+          ROS_ERROR_STREAM("[check_PnP]: Reprojected point in homogeneous coordinates is not properly normalized (last element is " << pt2d_h.z() << ")!");
+          all_ok = false;
+          continue;
+        }
+
+        const vec2d_t pt2d = pt2d_h.head<2>();
+        const vec2d_t pt2d_gt (detections.at(it).x, detections.at(it).y);
+
+        if ((pt2d - pt2d_gt).norm() > 1e-9)
+        {
+          ROS_ERROR_STREAM("[check_PnP]: Reprojected point [" << pt3d.transpose() << "] is [" << pt2d.transpose() << "] which is different from the ground-truth [" << pt2d_gt.transpose() << "]!");
+          all_ok = false;
+          continue;
+        }
+      }
+      return all_ok;
+    }
+
     void BaslerStereoDriver::m_tim_cbk_corners([[maybe_unused]]const ros::TimerEvent &ev) {
         if (not m_is_initialized) return;
         Eigen::Matrix3d R1, R2, R21;
@@ -221,11 +268,23 @@ namespace basler_stereo_driver {
                              R2,
                              t2);
             if (not resl) {
-                ROS_WARN("right u2msg error");
+                ROS_WARN("left u2msg error");
                 return;
             }
             if (not resr) {
-                ROS_WARN("left u2msg error");
+                ROS_WARN("right u2msg error");
+                return;
+            }
+
+            if (not check_PnP(left->detections, m_K_CL, R1, t1))
+            {
+                ROS_WARN("left reprojection check failed");
+                return;
+            }
+
+            if (not check_PnP(right->detections, m_K_CR, R2, t2))
+            {
+                ROS_WARN("right reprojection check failed");
                 return;
             }
 
