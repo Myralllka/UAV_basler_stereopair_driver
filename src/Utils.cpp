@@ -8,6 +8,8 @@ namespace basler_stereo_driver {
     constexpr double PADD_SIZE = 0.0135;
     constexpr double APTAG_PADD_SIZE = APTAG_SIZE + PADD_SIZE;
 
+    bool check_PnP(const std::vector<apriltag_ros::PointLabeled>& detections, const Eigen::Matrix3d& K, const Eigen::Matrix3d& R, const Eigen::Vector3d t);
+
     enum {
         // from PointLabeled message
         LEFTUP = 1,

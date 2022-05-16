@@ -209,9 +209,9 @@ namespace basler_stereo_driver {
     {
       using vec2d_t = Eigen::Vector2d;
       using vec3d_t = Eigen::Vector3d;
-      using vec4d_t = Eigen::Vector<double, 4, 1>;
-      using mat3d_t = Eigen::Vector<double, 4, 4>;
-      using mat3x4d_t = Eigen::Vector<double, 3, 4>;
+      using vec4d_t = Eigen::Matrix<double, 4, 1>;
+      using mat3d_t = Eigen::Matrix<double, 4, 4>;
+      using mat3x4d_t = Eigen::Matrix<double, 3, 4>;
 
       bool all_ok = true;
 
@@ -262,7 +262,8 @@ namespace basler_stereo_driver {
 
         if (cur_error > 1e-3)
         {
-          ROS_ERROR_STREAM("[check_PnP]: Reprojected point [" << pt3d.transpose() << "] is [" << pt2d.transpose() << "] which is different from the ground-truth [" << pt2d_gt.transpose() << "]!");
+          ROS_ERROR_STREAM("[check_PnP]: Reprojected point [" << pt3d.transpose() << "] is [" << pt2d.transpose() <<
+          "] which is different from the ground-truth [" << ptIm_gt.transpose() << "]!");
           all_ok = false;
         }
       }
@@ -295,14 +296,17 @@ namespace basler_stereo_driver {
                 ROS_WARN("right u2msg error");
                 return;
             }
+            Eigen::Matrix3d K1, K2;
+            cv::cv2eigen(m_K_CL, K1);
+            cv::cv2eigen(m_K_CR, K2);
 
-            if (not check_PnP(left->detections, m_K_CL, R1, t1))
+            if (not check_PnP(left->detections, K1, R1, t1))
             {
                 ROS_WARN("left reprojection check failed");
                 return;
             }
 
-            if (not check_PnP(right->detections, m_K_CR, R2, t2))
+            if (not check_PnP(right->detections, K2, R2, t2))
             {
                 ROS_WARN("right reprojection check failed");
                 return;
