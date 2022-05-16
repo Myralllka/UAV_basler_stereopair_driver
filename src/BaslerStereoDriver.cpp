@@ -245,11 +245,12 @@ namespace basler_stereo_driver {
         }
 
         // project the point to the image coordinates
-        const vec3d_t pt_proj = K*pt2d_h;
+        vec3d_t pt_proj = K*pt2d_h;
+        pt_proj = pt_proj / pt_proj.z();
 
-        if (std::abs(pt_proj.z() - 1.0) > 1e-9)
-        {
           ROS_ERROR_STREAM("[check_PnP]: Reprojected point in homogeneous coordinates is not properly normalized (last element is " << pt2d_h.z() << ")!");
+          if (std::abs(pt_proj.z() - 1.0) > 1e-9)
+        {
           all_ok = false;
           continue;
         }
@@ -262,7 +263,7 @@ namespace basler_stereo_driver {
 
         if (cur_error > 1e-3)
         {
-          ROS_ERROR_STREAM("[check_PnP]: Reprojected point [" << pt3d.transpose() << "] is [" << pt2d.transpose() <<
+          ROS_ERROR_STREAM("[check_PnP]: Reprojected point [" << pt3d.transpose() << "] is [" << ptIm.transpose() <<
           "] which is different from the ground-truth [" << ptIm_gt.transpose() << "]!");
           all_ok = false;
         }
@@ -278,8 +279,14 @@ namespace basler_stereo_driver {
         Eigen::Matrix3d R1, R2, R21;
         Eigen::Matrix<double, 3, 1> t1, t2, t21;
         if (m_handler_cornersfleft.newMsg() and m_handler_cornersfright.newMsg()) {
-            auto left = m_handler_cornersfleft.getMsg().get();
-            auto right = m_handler_cornersfright.getMsg().get();
+            auto left = m_handler_cornersfleft.getMsg();
+            auto right = m_handler_cornersfright.getMsg();
+            for (size_t i = 0; i < left->detections.size(); ++i) {
+                ROS_INFO_STREAM("[check_detection_points] left pt: " << left->detections[i] << std::endl);
+            }
+            for (size_t i = 0; i < right->detections.size(); ++i) {
+                ROS_INFO_STREAM("[check_detection_points] right pt: " << right->detections[i] << std::endl);
+            }
             auto resl = u2RT(left->detections,
                              m_K_CL,
                              R1,
@@ -334,7 +341,7 @@ namespace basler_stereo_driver {
                 m_tbroadcaster.sendTransform(c2c1);
             } else {
                 ROS_WARN_THROTTLE(1.0, "NaNs in transformation");
-            };
+            }
 
 
 //            auto res_msg = tf2::eigenToTransform(mat1);
