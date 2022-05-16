@@ -227,6 +227,7 @@ namespace basler_stereo_driver {
       for (const auto& cv_pt : td_pts_cv)
         td_pts.emplace_back(cv_pt.x, cv_pt.y, cv_pt.z);
 
+      double total_error = 0.0;
       for (size_t it = 0; it < detections.size(); it++)
       {
         const vec3d_t& pt3d = td_pts.at(it);
@@ -256,14 +257,18 @@ namespace basler_stereo_driver {
         // compare it with the ground-truth
         const vec2d_t ptIm = pt_proj.head<2>();
         const vec2d_t ptIm_gt (detections.at(it).x, detections.at(it).y);
+        const double cur_error = (pt2d - pt2d_gt).norm();
+        total_error += cur_error;
 
-        if ((pt2d - pt2d_gt).norm() > 1e-9)
+        if (cur_error > 1e-3)
         {
           ROS_ERROR_STREAM("[check_PnP]: Reprojected point [" << pt3d.transpose() << "] is [" << pt2d.transpose() << "] which is different from the ground-truth [" << pt2d_gt.transpose() << "]!");
           all_ok = false;
-          continue;
         }
       }
+
+      ROS_INFO_STREAM("[check_PnP]: The total reprojection error is " << total_error << "px.");
+
       return all_ok;
     }
 
