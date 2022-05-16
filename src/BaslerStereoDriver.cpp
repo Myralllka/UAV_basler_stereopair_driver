@@ -219,28 +219,43 @@ namespace basler_stereo_driver {
       mat3d_t tf = Eigen::Matrix<double, 4, 4>::Identity();
       tf.topLeftCorner<3, 3>() = R;
       tf.col(3).head<3>() = t;
-      const mat3x4d_t mat4d_to_3d= Eigen::Matrix<double, 3, 4>::Identity();
+      const mat3x4d_t mat4d_to_3d = Eigen::Matrix<double, 3, 4>::Identity();
 
       const std::vector<cv::Point3d> td_pts_cv = make_3d_apriltag_points(detections);
       std::vector<Eigen::Vector3d> td_pts;
-      std::transform(std::begin(td_pts_cv), std::end(td_pts_cv), std::begin(td_pts), cv::cv2eigen);
+      td_pts.reserve(td_pts_cv.size());
+      for (const auto& cv_pt : td_pts_cv)
+        td_pts.emplace_back(cv_pt.x, cv_pt.y, cv_pt.z);
+
       for (size_t it = 0; it < detections.size(); it++)
       {
         const vec3d_t& pt3d = td_pts.at(it);
-        const vec4d_t pt3d_h (pt3d.x(), pt3d.y(), pt3d.z(), 1);
+        const vec4d_t pt3d_h (pt3d.x(), pt3d.y(), pt3d.z(), 1.0);
 
-        // transform the 3d point to the camera frame and project it to 2d (in homogeneous coordinates)
-        const vec3d_t pt2d_h = K*mat4d_to_3d*tf*pt3d_h;
+        // transform the 3d point to the camera frame and normalize it to 2d homogeneous coordinates
+        const vec3d_t pt2d = mat4d_to_3d*tf*pt3d_h;
+        const vec3d_t pt2d_h = pt2d / pt2d.z();
 
         if (std::abs(pt2d_h.z() - 1.0) > 1e-9)
+        {
+          ROS_ERROR_STREAM("[check_PnP]: Point in homogeneous 2D coordinates is not properly normalized (last element is " << pt2d_h.z() << ")!");
+          all_ok = false;
+          continue;
+        }
+
+        // project the point to the image coordinates
+        const vec3d_t pt_proj = K*pt2d_h;
+
+        if (std::abs(pt_proj.z() - 1.0) > 1e-9)
         {
           ROS_ERROR_STREAM("[check_PnP]: Reprojected point in homogeneous coordinates is not properly normalized (last element is " << pt2d_h.z() << ")!");
           all_ok = false;
           continue;
         }
 
-        const vec2d_t pt2d = pt2d_h.head<2>();
-        const vec2d_t pt2d_gt (detections.at(it).x, detections.at(it).y);
+        // compare it with the ground-truth
+        const vec2d_t ptIm = pt_proj.head<2>();
+        const vec2d_t ptIm_gt (detections.at(it).x, detections.at(it).y);
 
         if ((pt2d - pt2d_gt).norm() > 1e-9)
         {
