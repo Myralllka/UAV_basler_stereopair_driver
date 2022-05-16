@@ -6,7 +6,7 @@ set(FILESNAME BaslerStereoDriver)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_compile_options(-Wall -Wextra -pedantic -Werror -Werror=vla)
+add_compile_options(-Wall -Wextra -pedantic -Werror -Werror=vla -DEIGEN_INITIALIZE_MATRICES_BY_NAN)
 
 find_package(catkin REQUIRED COMPONENTS
         roscpp
@@ -46,6 +46,7 @@ include_directories(include
         ${catkin_INCLUDE_DIRS}
         ${PCL_INCLUDE_DIRS}
         )
+
 
 add_library(${FILESNAME} src/${FILESNAME}.cpp src/Utils.cpp)
 

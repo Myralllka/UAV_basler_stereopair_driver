@@ -48,7 +48,6 @@
 #include <opencv2/core/eigen.hpp>
 #include <Utils.h>
 /* user includes */
-
 //}
 
 /// Returns the 3D cross product Skew symmetric matrix of a given 3D vector.

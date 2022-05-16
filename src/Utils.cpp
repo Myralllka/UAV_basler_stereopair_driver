@@ -52,7 +52,8 @@ namespace basler_stereo_driver {
                          d,
                          r_cv,
                          t_cv,
-                         false);
+                         false,
+                         cv::SOLVEPNP_DLS);
             cv::Rodrigues(r_cv, R_cv);
             cv::cv2eigen(R_cv, R);
             cv::cv2eigen(t_cv, t);

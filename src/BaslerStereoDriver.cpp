@@ -230,27 +230,56 @@ namespace basler_stereo_driver {
             }
 
             R21 = R2 * R1.transpose();
-            std::cout << R1 << std::endl;
-            std::cout << R2 << std::endl;
-            std::cout << R21 << std::endl;
+//            std::cout << R1 << std::endl;
+//            std::cout << R2 << std::endl;
+//            std::cout << R21 << std::endl;
             t21 = t2 - R21 * t1;
-            Eigen::Affine3d mat1 = Eigen::Affine3d::Identity();
-            mat1.translate(-t1).rotate(R1.transpose());
 
-            auto res_msg = tf2::eigenToTransform(mat1);
-            res_msg.header.stamp = ros::Time::now();
-            res_msg.header.frame_id = "tag_base";
-//            res_msg.header.frame_id = "uav1/basler_right_optical";
-            res_msg.child_frame_id = "debug";
+            Eigen::Affine3d mat21 = Eigen::Affine3d::Identity();
 
-            m_tbroadcaster.sendTransform(res_msg);
-            auto res_msg3 = tf2::eigenToTransform(mat1.inverse());
-            res_msg3.header.stamp = ros::Time::now();
-            res_msg3.header.frame_id = "tag_base";
-//            res_msg3.header.frame_id = "uav1/basler_left_optical";
-            res_msg3.child_frame_id = "debug3";
-            m_tbroadcaster.sendTransform(res_msg3);
+//            Eigen::Affine3d mat1 = Eigen::Affine3d::Identity();
+//            Eigen::Affine3d mat2 = Eigen::Affine3d::Identity();
+//            mat1.translate(-R1.transpose() * t1).rotate(R1);
+//            mat2.translate(-R2.transpose() * t2).rotate(R2);
+            mat21.translate(t21).rotate(R21);
 
+            if (Eigen::isfinite(mat21.matrix().array()).all()) {
+                auto c2c1 = tf2::eigenToTransform(mat21);
+                c2c1.header.stamp = ros::Time::now();
+                c2c1.header.frame_id = "uav1/basler_right_optical";
+                c2c1.child_frame_id = "c2c1debug";
+                m_tbroadcaster.sendTransform(c2c1);
+            } else {
+                ROS_WARN_THROTTLE(1.0, "NaNs in transformation");
+            };
+
+
+//            auto res_msg = tf2::eigenToTransform(mat1);
+//            res_msg.header.stamp = ros::Time::now();
+//            res_msg.header.frame_id = "tag_base";
+////            res_msg.header.frame_id = "uav1/basler_right_optical";
+//            res_msg.child_frame_id = "debug";
+//            m_tbroadcaster.sendTransform(res_msg);
+//
+//            auto res_msg2 = tf2::eigenToTransform(mat2);
+//            res_msg2.header.stamp = ros::Time::now();
+//            res_msg2.header.frame_id = "tag_base";
+//            res_msg2.child_frame_id = "debug2";
+//            m_tbroadcaster.sendTransform(res_msg2);
+//
+//            auto res_msg3 = tf2::eigenToTransform(mat1.inverse());
+//            res_msg3.header.stamp = ros::Time::now();
+//            res_msg3.header.frame_id = "tag_base";
+////            res_msg3.header.frame_id = "uav1/basler_left_optical";
+//            res_msg3.child_frame_id = "debug3";
+//            m_tbroadcaster.sendTransform(res_msg3);
+//
+//            auto res_msg4 = tf2::eigenToTransform(mat2.inverse());
+//            res_msg4.header.stamp = ros::Time::now();
+//            res_msg4.header.frame_id = "tag_base";
+//            res_msg4.child_frame_id = "debug4";
+//            m_tbroadcaster.sendTransform(res_msg4);
+//
         }
     }
 

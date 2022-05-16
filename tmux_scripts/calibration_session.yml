@@ -6,11 +6,11 @@ windows:
       layout: tiled
       panes:
         - roscore
-  - rqt_imgs:
-      layout: tiled
-      panes:
-        - waitForRos; rosrun rqt_image_view rqt_image_view /$UAV_NAME/fleft/tag_detections_image
-        - waitForRos; rosrun rqt_image_view rqt_image_view /$UAV_NAME/fright/tag_detections_image
+#  - rqt_imgs:
+#      layout: tiled
+#      panes:
+#        - waitForRos; rosrun rqt_image_view rqt_image_view /$UAV_NAME/fleft/tag_detections_image
+#        - waitForRos; rosrun rqt_image_view rqt_image_view /$UAV_NAME/fright/tag_detections_image
   - rviz:
       layout: tiled
       panes:
