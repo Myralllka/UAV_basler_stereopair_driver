@@ -257,7 +257,7 @@ namespace basler_stereo_driver {
         // compare it with the ground-truth
         const vec2d_t ptIm = pt_proj.head<2>();
         const vec2d_t ptIm_gt (detections.at(it).x, detections.at(it).y);
-        const double cur_error = (pt2d - pt2d_gt).norm();
+        const double cur_error = (ptIm - ptIm_gt).norm();
         total_error += cur_error;
 
         if (cur_error > 1e-3)
