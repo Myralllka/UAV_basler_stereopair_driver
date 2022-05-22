@@ -17,7 +17,7 @@
     First one is a pose minimisation of 3d tags detected by apriltag detector
     Second is a PnP problem solver from corners data from the same apriltag detector
     3d and PnP modes.-->
-    <arg name="calib_algo" default="PnP"/>
+    <arg name="calib_algo" default="3d"/>
 
     <!-- will it run using GNU debugger? -->
     <arg name="debug" default="false"/>
