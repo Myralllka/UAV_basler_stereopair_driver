@@ -1,0 +1,1 @@
+rosrun camera_calibration_fisheye cameracalibrator.py --size 7x9 --square 0.052 right:=/uav1/basler_right/image_raw left:=/uav1/basler_left/image_raw left_camera:=/uav1 basler_left right_camera:=/uav1/basler_right\

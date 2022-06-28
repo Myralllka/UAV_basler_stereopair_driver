@@ -41,7 +41,6 @@ namespace basler_stereo_driver {
         // | ---------------- some data post-processing --------------- |
 
         // | ----------------- publishers initialize ------------------ |
-        m_pub_multiview = nh.advertise<mrs_msgs::ImageLabeledArray>("multiview_labeled", 1);
         m_pub_imdebug = nh.advertise<sensor_msgs::Image>("basler_driver_imdebug", 1);
         // | ---------------- subscribers initialize ------------------ |
 
@@ -105,53 +104,49 @@ namespace basler_stereo_driver {
                                                       1,
                                                       &BaslerStereoDriver::m_cbk_complete_save_calibration,
                                                       this);
+            m_sub_camera_fleft = nh.subscribe(m_name_fleft_tag_det,
+                                              1,
+                                              &BaslerStereoDriver::m_cbk_tag_detection_fleft,
+                                              this);
+            m_sub_camera_fright = nh.subscribe(m_name_fright_tag_det,
+                                               1,
+                                               &BaslerStereoDriver::m_cbk_tag_detection_fright,
+                                               this);
+            mrs_lib::construct_object(m_handler_camleftinfo,
+                                      shopt,
+                                      "/" + m_uav_name + "/basler_left/camera_info");
+            mrs_lib::construct_object(m_handler_camrightinfo,
+                                      shopt,
+                                      "/" + m_uav_name + "/basler_right/camera_info");
+            // initialize cameras with pinhole model
+            while (not(m_handler_camleftinfo.newMsg() and m_handler_camrightinfo.newMsg())) {
+                ROS_WARN_THROTTLE(1.0, "[%s]: waiting for camera info messages", NODENAME.c_str());
+            }
+            m_camera_right.fromCameraInfo(m_handler_camrightinfo.getMsg());
+            m_camera_left.fromCameraInfo(m_handler_camleftinfo.getMsg());
+            ros::Duration(0.1).sleep();
+            m_K_CL = f2K33(m_handler_camleftinfo.getMsg().get()->P);
+            m_K_CR = f2K33(m_handler_camrightinfo.getMsg().get()->P);
         } else {
             // stereopair pose parameters
             auto fright_rotation = pl.loadMatrixStatic2<3, 3>("fright_camera/rotation");
             auto fright_translation = pl.loadMatrixStatic2<3, 1>("fright_camera/translation");
 
             m_fright_pose.translate(fright_translation).rotate(Eigen::Quaterniond{fright_rotation});
-            m_tim_fright_pose = nh.createTimer(ros::Duration(0.001),
+            m_tim_fright_pose = nh.createTimer(ros::Duration(0.0001),
                                                &BaslerStereoDriver::m_tim_cbk_fright_pose,
                                                this);
             // for epipolar lines drawing I'll use subscriber handler
-            mrs_lib::construct_object(m_handler_imleft,
-                                      shopt,
-                                      "/" + m_uav_name + "/fleft/tag_detections_image");
+//            mrs_lib::construct_object(m_handler_imleft,
+//                                      shopt,
+//                                      "/" + m_uav_name + "/fleft/tag_detections_image");
 //                                      "/" + m_uav_name + "/basler_left/image_rect");
-            mrs_lib::construct_object(m_handler_imright,
-                                      shopt,
-                                      "/" + m_uav_name + "/fright/tag_detections_image");
+//            mrs_lib::construct_object(m_handler_imright,
+//                                      shopt,
+//                                      "/" + m_uav_name + "/fright/tag_detections_image");
 //                                      "/" + m_uav_name + "/basler_right/image_rect");
         }
-        mrs_lib::construct_object(m_handler_camleftinfo,
-                                  shopt,
-                                  "/" + m_uav_name + "/basler_left/camera_info");
-        mrs_lib::construct_object(m_handler_camrightinfo,
-                                  shopt,
-                                  "/" + m_uav_name + "/basler_right/camera_info");
-        // initialize cameras with pinhole model
-        while (not(m_handler_camleftinfo.newMsg() and m_handler_camrightinfo.newMsg())) {
-            ROS_WARN_THROTTLE(1.0, "[%s]: waiting for camera info messages", NODENAME.c_str());
-        }
-        m_camera_right.fromCameraInfo(m_handler_camrightinfo.getMsg());
-        m_camera_left.fromCameraInfo(m_handler_camleftinfo.getMsg());
-        ros::Duration(0.1).sleep();
-        m_K_CL = f2K33(m_handler_camleftinfo.getMsg().get()->P);
-        m_K_CR = f2K33(m_handler_camrightinfo.getMsg().get()->P);
-        // TODO: repair
-//        m_tim_collect_images = nh.createTimer(ros::Duration(0.001),
-//                                              &BaslerStereoDriver::m_tim_cbk_collect_images,
-//                                              this);
         // needed
-        m_sub_camera_fleft = nh.subscribe(m_name_fleft_tag_det,
-                                          1,
-                                          &BaslerStereoDriver::m_cbk_tag_detection_fleft,
-                                          this);
-        m_sub_camera_fright = nh.subscribe(m_name_fright_tag_det,
-                                           1,
-                                           &BaslerStereoDriver::m_cbk_tag_detection_fright,
-                                           this);
         ROS_INFO_ONCE("[%s]: initialized", NODENAME.c_str());
         m_is_initialized = true;
     }
@@ -205,73 +200,75 @@ namespace basler_stereo_driver {
 
 // | --------------------- timer callbacks -------------------- |
 
-    bool check_PnP(const std::vector<apriltag_ros::PointLabeled>& detections, const Eigen::Matrix3d& K, const Eigen::Matrix3d& R, const Eigen::Vector3d t)
-    {
-      using vec2d_t = Eigen::Vector2d;
-      using vec3d_t = Eigen::Vector3d;
-      using vec4d_t = Eigen::Matrix<double, 4, 1>;
-      using mat3d_t = Eigen::Matrix<double, 4, 4>;
-      using mat3x4d_t = Eigen::Matrix<double, 3, 4>;
+    bool check_PnP(const std::vector<apriltag_ros::PointLabeled> &detections, const Eigen::Matrix3d &K,
+                   const Eigen::Matrix3d &R, const Eigen::Vector3d &t) {
+        using vec2d_t = Eigen::Vector2d;
+        using vec3d_t = Eigen::Vector3d;
+        using vec4d_t = Eigen::Matrix<double, 4, 1>;
+        using mat3d_t = Eigen::Matrix<double, 4, 4>;
+        using mat3x4d_t = Eigen::Matrix<double, 3, 4>;
 
-      bool all_ok = true;
+        bool all_ok = true;
 
-      // https://docs.opencv.org/4.2.0/d9/d0c/group__calib3d.html#ga549c2075fac14829ff4a58bc931c033d
-      mat3d_t tf = Eigen::Matrix<double, 4, 4>::Identity();
-      tf.topLeftCorner<3, 3>() = R;
-      tf.col(3).head<3>() = t;
-      const mat3x4d_t mat4d_to_3d = Eigen::Matrix<double, 3, 4>::Identity();
+        // https://docs.opencv.org/4.2.0/d9/d0c/group__calib3d.html#ga549c2075fac14829ff4a58bc931c033d
+        mat3d_t tf = Eigen::Matrix<double, 4, 4>::Identity();
+        tf.topLeftCorner<3, 3>() = R;
+        tf.col(3).head<3>() = t;
+        const mat3x4d_t mat4d_to_3d = Eigen::Matrix<double, 3, 4>::Identity();
 
-      const std::vector<cv::Point3d> td_pts_cv = make_3d_apriltag_points(detections);
-      std::vector<Eigen::Vector3d> td_pts;
-      td_pts.reserve(td_pts_cv.size());
-      for (const auto& cv_pt : td_pts_cv)
-        td_pts.emplace_back(cv_pt.x, cv_pt.y, cv_pt.z);
+        const std::vector<cv::Point3d> td_pts_cv = make_3d_apriltag_points(detections);
+        std::vector<Eigen::Vector3d> td_pts;
+        td_pts.reserve(td_pts_cv.size());
+        for (const auto &cv_pt: td_pts_cv)
+            td_pts.emplace_back(cv_pt.x, cv_pt.y, cv_pt.z);
 
-      double total_error = 0.0;
-      for (size_t it = 0; it < detections.size(); it++)
-      {
-        const vec3d_t& pt3d = td_pts.at(it);
-        const vec4d_t pt3d_h (pt3d.x(), pt3d.y(), pt3d.z(), 1.0);
+        double total_error = 0.0;
+        for (size_t it = 0; it < detections.size(); it++) {
+            const vec3d_t &pt3d = td_pts.at(it);
+            const vec4d_t pt3d_h(pt3d.x(), pt3d.y(), pt3d.z(), 1.0);
 
-        // transform the 3d point to the camera frame and normalize it to 2d homogeneous coordinates
-        const vec3d_t pt2d = mat4d_to_3d*tf*pt3d_h;
-        const vec3d_t pt2d_h = pt2d / pt2d.z();
+            // transform the 3d point to the camera frame and normalize it to 2d homogeneous coordinates
+            const vec3d_t pt2d = mat4d_to_3d * tf * pt3d_h;
+            const vec3d_t pt2d_h = pt2d / pt2d.z();
 
-        if (std::abs(pt2d_h.z() - 1.0) > 1e-9)
-        {
-          ROS_ERROR_STREAM("[check_PnP]: Point in homogeneous 2D coordinates is not properly normalized (last element is " << pt2d_h.z() << ")!");
-          all_ok = false;
-          continue;
+            if (std::abs(pt2d_h.z() - 1.0) > 1e-9) {
+                ROS_ERROR_STREAM(
+                        "[check_PnP]: Point in homogeneous 2D coordinates is not properly normalized (last element is "
+                                << pt2d_h.z() << ")!");
+                all_ok = false;
+                continue;
+            }
+
+            // project the point to the image coordinates
+            vec3d_t pt_proj = K * pt2d_h;
+            pt_proj = pt_proj / pt_proj.z();
+
+            ROS_ERROR_STREAM(
+                    "[check_PnP]: Reprojected point in homogeneous coordinates is not properly normalized (last element is "
+                            << pt2d_h.z() << ")!");
+            if (std::abs(pt_proj.z() - 1.0) > 1e-9) {
+                all_ok = false;
+                continue;
+            }
+
+            // compare it with the ground-truth
+            const vec2d_t ptIm = pt_proj.head<2>();
+            const vec2d_t ptIm_gt(detections.at(it).x, detections.at(it).y);
+            const double cur_error = (ptIm - ptIm_gt).norm();
+            total_error += cur_error;
+
+            if (cur_error > 1e-3) {
+                ROS_ERROR_STREAM(
+                        "[check_PnP]: Reprojected point [" << pt3d.transpose() << "] is [" << ptIm.transpose() <<
+                                                           "] which is different from the ground-truth ["
+                                                           << ptIm_gt.transpose() << "]!");
+                all_ok = false;
+            }
         }
 
-        // project the point to the image coordinates
-        vec3d_t pt_proj = K*pt2d_h;
-        pt_proj = pt_proj / pt_proj.z();
+        ROS_INFO_STREAM("[check_PnP]: The total reprojection error is " << total_error << "px.");
 
-          ROS_ERROR_STREAM("[check_PnP]: Reprojected point in homogeneous coordinates is not properly normalized (last element is " << pt2d_h.z() << ")!");
-          if (std::abs(pt_proj.z() - 1.0) > 1e-9)
-        {
-          all_ok = false;
-          continue;
-        }
-
-        // compare it with the ground-truth
-        const vec2d_t ptIm = pt_proj.head<2>();
-        const vec2d_t ptIm_gt (detections.at(it).x, detections.at(it).y);
-        const double cur_error = (ptIm - ptIm_gt).norm();
-        total_error += cur_error;
-
-        if (cur_error > 1e-3)
-        {
-          ROS_ERROR_STREAM("[check_PnP]: Reprojected point [" << pt3d.transpose() << "] is [" << ptIm.transpose() <<
-          "] which is different from the ground-truth [" << ptIm_gt.transpose() << "]!");
-          all_ok = false;
-        }
-      }
-
-      ROS_INFO_STREAM("[check_PnP]: The total reprojection error is " << total_error << "px.");
-
-      return all_ok;
+        return all_ok;
     }
 
     void BaslerStereoDriver::m_tim_cbk_corners([[maybe_unused]]const ros::TimerEvent &ev) {
@@ -281,11 +278,11 @@ namespace basler_stereo_driver {
         if (m_handler_cornersfleft.newMsg() and m_handler_cornersfright.newMsg()) {
             auto left = m_handler_cornersfleft.getMsg();
             auto right = m_handler_cornersfright.getMsg();
-            for (size_t i = 0; i < left->detections.size(); ++i) {
-                ROS_INFO_STREAM("[check_detection_points] left pt: " << left->detections[i] << std::endl);
+            for (auto detection: left->detections) {
+                ROS_INFO_STREAM("[check_detection_points] left pt: " << detection << std::endl);
             }
-            for (size_t i = 0; i < right->detections.size(); ++i) {
-                ROS_INFO_STREAM("[check_detection_points] right pt: " << right->detections[i] << std::endl);
+            for (auto detection: right->detections) {
+                ROS_INFO_STREAM("[check_detection_points] right pt: " << detection << std::endl);
             }
             auto resl = u2RT(left->detections,
                              m_K_CL,
@@ -307,14 +304,12 @@ namespace basler_stereo_driver {
             cv::cv2eigen(m_K_CL, K1);
             cv::cv2eigen(m_K_CR, K2);
 
-            if (not check_PnP(left->detections, K1, R1, t1))
-            {
+            if (not check_PnP(left->detections, K1, R1, t1)) {
                 ROS_WARN("left reprojection check failed");
                 return;
             }
 
-            if (not check_PnP(right->detections, K2, R2, t2))
-            {
+            if (not check_PnP(right->detections, K2, R2, t2)) {
                 ROS_WARN("right reprojection check failed");
                 return;
             }
@@ -543,65 +538,6 @@ namespace basler_stereo_driver {
             result.push_back(el.pose.pose.position);
         }
         return result;
-    }
-
-    void BaslerStereoDriver::m_tim_cbk_collect_images([[maybe_unused]] const ros::TimerEvent &ev) {
-
-        // collect images from almost the same timestamp and publish them as one image
-        // I made it because it was so complicated to keep tracking of all image pairs
-//        used in python script
-// TODO: check for number of subscribers and if there is no subscribers - dont publish images.
-        if (not m_is_initialized) return;
-        if (m_handler_imleft.newMsg() and m_handler_imright.newMsg()) {
-            imleft = m_handler_imleft.getMsg();
-            imright = m_handler_imright.getMsg();
-            auto time_diff = std::abs(imleft->header.stamp.toSec() - imright->header.stamp.toSec());
-            if (time_diff > ros::Duration(0.2).toSec()) {
-                ROS_WARN_THROTTLE(1.0,
-                                  "[%s]: impair: images coordinates timestamps are too far away from each other: %f",
-                                  NODENAME.c_str(),
-                                  time_diff);
-                return;
-            }
-            ROS_INFO_THROTTLE(1.0, "[%s]: impair: images timestamps are okay", NODENAME.c_str());
-        } else {
-            ROS_WARN_THROTTLE(1.0, "[%s]: impair: no new images", NODENAME.c_str());
-            return;
-        }
-
-        m_impair = boost::make_shared<mrs_msgs::ImageLabeledArray>();
-        mrs_msgs::ImageLabeled im_labeled_fright{};
-        mrs_msgs::ImageLabeled im_labeled_fleft{};
-
-        im_labeled_fleft.label = "fleft";
-        im_labeled_fright.label = "fright";
-
-        im_labeled_fleft.img.header.stamp = imleft->header.stamp;
-        im_labeled_fleft.img.header.frame_id = imleft->header.frame_id;
-        im_labeled_fleft.img.data = imleft->data;
-        im_labeled_fleft.img.step = imleft->step;
-        im_labeled_fleft.img.width = imleft->width;
-        im_labeled_fleft.img.height = imleft->height;
-        im_labeled_fleft.img.encoding = imleft->encoding;
-        im_labeled_fleft.img.is_bigendian = imleft->is_bigendian;
-
-        im_labeled_fright.img.header.stamp = imright->header.stamp;
-        im_labeled_fright.img.header.frame_id = imright->header.frame_id;
-        im_labeled_fright.img.data = imright->data;
-        im_labeled_fright.img.step = imright->step;
-        im_labeled_fright.img.width = imright->width;
-        im_labeled_fright.img.height = imright->height;
-        im_labeled_fright.img.encoding = imright->encoding;
-        im_labeled_fright.img.is_bigendian = imright->is_bigendian;
-
-        m_impair->header.stamp = imright->header.stamp;
-        m_impair->header.frame_id = m_name_base;
-
-        m_impair->imgs_labeled.push_back(im_labeled_fright);
-        m_impair->imgs_labeled.push_back(im_labeled_fleft);
-
-        m_pub_multiview.publish(m_impair);
-        ROS_INFO_THROTTLE(1.0, "[%s]: impair: impair updated", NODENAME.c_str());
     }
 
     Eigen::Affine3d BaslerStereoDriver::m_interpolate_pose(const Eigen::Affine3d &input_avg,

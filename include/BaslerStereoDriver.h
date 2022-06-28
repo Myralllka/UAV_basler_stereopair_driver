@@ -21,8 +21,6 @@
 #include <mrs_lib/transformer.h>
 #include <mrs_lib/transform_broadcaster.h>
 #include <mrs_lib/subscribe_handler.h>
-#include <mrs_msgs/ImageLabeled.h>
-#include <mrs_msgs/ImageLabeledArray.h>
 
 /* other important includes */
 #include <nav_msgs/Odometry.h>
@@ -73,8 +71,8 @@ namespace basler_stereo_driver {
 
         /* ros parameters */
         std::string m_uav_name;
-        float m_time_transformation{0.001};
-        float m_time_tagcoor{0.001};
+        float m_time_transformation{0.00001};
+        float m_time_tagcoor{0.00001};
 
         mrs_lib::TransformBroadcaster m_tbroadcaster;
 
@@ -88,8 +86,6 @@ namespace basler_stereo_driver {
         /* images for image pair */
         sensor_msgs::Image::ConstPtr imleft;
         sensor_msgs::Image::ConstPtr imright;
-
-        mrs_msgs::ImageLabeledArray::Ptr m_impair;
 
         /* tag detection callback data */
         std::vector<geometry_msgs::Point> m_left_tag_poses;
@@ -139,8 +135,6 @@ namespace basler_stereo_driver {
         ros::Timer m_tim_mse;
 
         void m_tim_cbk_corners(const ros::TimerEvent &ev);
-
-        void m_tim_cbk_collect_images(const ros::TimerEvent &ev);
 
         void m_tim_cbk_find_BR(const ros::TimerEvent &ev);
 
