@@ -331,7 +331,7 @@ namespace basler_stereo_driver {
             if (Eigen::isfinite(mat21.matrix().array()).all()) {
                 auto c2c1 = tf2::eigenToTransform(mat21);
                 c2c1.header.stamp = ros::Time::now();
-                c2c1.header.frame_id = "uav1/basler_right_optical";
+                c2c1.header.frame_id = m_uav_name + "/basler_right_optical";
                 c2c1.child_frame_id = "c2c1debug";
                 m_tbroadcaster.sendTransform(c2c1);
             } else {
@@ -342,7 +342,7 @@ namespace basler_stereo_driver {
 //            auto res_msg = tf2::eigenToTransform(mat1);
 //            res_msg.header.stamp = ros::Time::now();
 //            res_msg.header.frame_id = "tag_base";
-////            res_msg.header.frame_id = "uav1/basler_right_optical";
+////            res_msg.header.frame_id = m_uav_name + "/basler_right_optical";
 //            res_msg.child_frame_id = "debug";
 //            m_tbroadcaster.sendTransform(res_msg);
 //
@@ -355,7 +355,7 @@ namespace basler_stereo_driver {
 //            auto res_msg3 = tf2::eigenToTransform(mat1.inverse());
 //            res_msg3.header.stamp = ros::Time::now();
 //            res_msg3.header.frame_id = "tag_base";
-////            res_msg3.header.frame_id = "uav1/basler_left_optical";
+////            res_msg3.header.frame_id = m_uav_name + "/basler_left_optical";
 //            res_msg3.child_frame_id = "debug3";
 //            m_tbroadcaster.sendTransform(res_msg3);
 //

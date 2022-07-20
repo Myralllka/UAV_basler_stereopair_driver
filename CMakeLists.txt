@@ -38,10 +38,6 @@ catkin_package(
         DEPENDS Eigen
 )
 
-catkin_install_python(PROGRAMS scripts/pair_calibration_node.py
-        DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-        )
-
 include_directories(include
         ${catkin_INCLUDE_DIRS}
         ${PCL_INCLUDE_DIRS}
