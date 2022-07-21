@@ -114,10 +114,10 @@ namespace basler_stereo_driver {
                                                this);
             mrs_lib::construct_object(m_handler_camleftinfo,
                                       shopt,
-                                      "/" + m_uav_name + "/basler_left/camera_info");
+                                      "/" + m_uav_name + "/fleft/camera/camera_info");
             mrs_lib::construct_object(m_handler_camrightinfo,
                                       shopt,
-                                      "/" + m_uav_name + "/basler_right/camera_info");
+                                      "/" + m_uav_name + "/fright/camera/camera_info");
             // initialize cameras with pinhole model
             while (not(m_handler_camleftinfo.newMsg() and m_handler_camrightinfo.newMsg())) {
                 ROS_WARN_THROTTLE(1.0, "[%s]: waiting for camera info messages", NODENAME.c_str());
@@ -140,11 +140,11 @@ namespace basler_stereo_driver {
 //            mrs_lib::construct_object(m_handler_imleft,
 //                                      shopt,
 //                                      "/" + m_uav_name + "/fleft/tag_detections_image");
-//                                      "/" + m_uav_name + "/basler_left/image_rect");
+//                                      "/" + m_uav_name + "/fleft/camera/image_rect");
 //            mrs_lib::construct_object(m_handler_imright,
 //                                      shopt,
 //                                      "/" + m_uav_name + "/fright/tag_detections_image");
-//                                      "/" + m_uav_name + "/basler_right/image_rect");
+//                                      "/" + m_uav_name + "/fright/camera/image_rect");
         }
         // needed
         ROS_INFO_ONCE("[%s]: initialized", NODENAME.c_str());

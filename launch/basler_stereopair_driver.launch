@@ -66,9 +66,9 @@
             <!-- ROS parameters config file -->
             <rosparam file="$(find basler_stereopair_driver)/config/camera_poses.yaml"/>
             <rosparam file="$(find basler_stereopair_driver)/config/camera_calibrations/basler_left.yaml"
-                      ns="basler_left"/>
+              ns="fleft/camera"/>
             <rosparam file="$(find basler_stereopair_driver)/config/camera_calibrations/basler_right.yaml"
-                      ns="basler_right"/>
+              ns="fright/camera"/>
 
             <!-- Subscribers (note that the topic names will also be remapped using the namespace as a prefix) -->
 
@@ -83,24 +83,24 @@
 
         <group ns="fleft" unless="$(arg is_calibrated)">
             <include file="$(find apriltag_ros)/launch/continuous_detection.launch">
-                <arg name="camera_name" value="basler_left"/>
+              <arg name="camera_name" value="fleft/camera"/>
                 <arg name="image_topic" value="image_rect"/>
             </include>
             <node pkg="topic_tools" type="relay"
-                  args="/$(arg UAV_NAME)/basler_left/camera_info  basler_left/camera_info" name="in2in"/>
-            <node pkg="topic_tools" type="relay" args="/$(arg UAV_NAME)/basler_left/image_rect  basler_left/image_rect"
+              args="/$(arg UAV_NAME)/fleft/camera/camera_info  fleft/camera/camera_info" name="in2in"/>
+            <node pkg="topic_tools" type="relay" args="/$(arg UAV_NAME)/fleft/camera/image_rect  fleft/camera/image_rect"
                   name="im2im"/>
         </group>
 
         <group ns="fright" unless="$(arg is_calibrated)">
             <include file="$(find apriltag_ros)/launch/continuous_detection.launch">
-                <arg name="camera_name" value="basler_right"/>
+              <arg name="camera_name" value="fright/camera"/>
                 <arg name="image_topic" value="image_rect"/>
             </include>
             <node pkg="topic_tools" type="relay"
-                  args="/$(arg UAV_NAME)/basler_right/camera_info  basler_right/camera_info" name="in2in"/>
+              args="/$(arg UAV_NAME)/fright/camera/camera_info  fright/camera/camera_info" name="in2in"/>
             <node pkg="topic_tools" type="relay"
-                  args="/$(arg UAV_NAME)/basler_right/image_rect  basler_right/image_rect" name="im2im"/>
+              args="/$(arg UAV_NAME)/fright/camera/image_rect  fright/camera/image_rect" name="im2im"/>
         </group>
 
     </group>

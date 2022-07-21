@@ -23,11 +23,11 @@
     <arg unless="$(arg standalone)" name="nodelet_manager" value="$(arg manager)"/>
 
     <include file="$(find apriltag_ros)/launch/continuous_detection.launch">
-        <arg name="camera_name" value="basler_left"/>
+      <arg name="camera_name" value="fleft/camera"/>
         <arg name="image_topic" value="image_rect"/>
     </include>
     <node pkg="topic_tools" type="relay"
-          args="/$(arg UAV_NAME)/basler_left/camera_info  basler_left/camera_info" name="in2in"/>
-    <node pkg="topic_tools" type="relay" args="/$(arg UAV_NAME)/basler_left/image_rect  basler_left/image_rect"
+      args="/$(arg UAV_NAME)/fleft/camera/camera_info  fleft/camera/camera_info" name="in2in"/>
+    <node pkg="topic_tools" type="relay" args="/$(arg UAV_NAME)/fleft/camera/image_rect  fleft/camera/image_rect"
           name="im2im"/>
 </launch>
