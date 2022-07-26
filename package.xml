@@ -27,7 +27,7 @@
     <depend>image_geometry</depend>
     <!--https://mrs.felk.cvut.cz/gitlab/uav/drivers/pylon-ros-camera/tree/sdk6.2.0  branch morhunenko-->
     <depend>pylon_camera</depend>
-    <!-- https://github.com/AprilRobotics/apriltag_ros -->
+    <!-- https://github.com/Myralllka/apriltag_ros -->
     <depend>apriltag_ros</depend>
 
     <export>
