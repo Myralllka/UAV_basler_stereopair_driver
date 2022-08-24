@@ -8,11 +8,13 @@ Panels:
         - /Status1
         - /Grid1
         - /TF1
+        - /TF1/Status1
         - /TF1/Frames1
         - /TF1/Tree1
         - /Camera1
+        - /Camera2
       Splitter Ratio: 0.6821345686912537
-    Tree Height: 312
+    Tree Height: 322
   - Class: rviz/Selection
     Name: Selection
   - Class: rviz/Tool Properties
@@ -64,89 +66,89 @@ Visualization Manager:
         All Enabled: false
         tag_base:
           Value: false
-        uav1/basler_left_optical:
+        uav2/basler_left_optical:
           Value: true
-        uav1/basler_left_optical/my_bundle:
+        uav2/basler_left_optical/my_bundle:
           Value: false
-        uav1/basler_left_optical/tag_0:
+        uav2/basler_left_optical/tag_0:
           Value: true
-        uav1/basler_left_optical/tag_1:
-          Value: false
-        uav1/basler_left_optical/tag_10:
-          Value: false
-        uav1/basler_left_optical/tag_11:
+        uav2/basler_left_optical/tag_1:
           Value: true
-        uav1/basler_left_optical/tag_2:
+        uav2/basler_left_optical/tag_10:
           Value: true
-        uav1/basler_left_optical/tag_3:
-          Value: false
-        uav1/basler_left_optical/tag_4:
-          Value: false
-        uav1/basler_left_optical/tag_5:
-          Value: false
-        uav1/basler_left_optical/tag_6:
-          Value: false
-        uav1/basler_left_optical/tag_7:
-          Value: false
-        uav1/basler_left_optical/tag_8:
-          Value: false
-        uav1/basler_left_optical/tag_9:
+        uav2/basler_left_optical/tag_11:
           Value: true
-        uav1/basler_right_optical:
+        uav2/basler_left_optical/tag_2:
           Value: true
-        uav1/basler_right_optical/my_bundle:
-          Value: false
-        uav1/basler_right_optical/tag_0:
+        uav2/basler_left_optical/tag_3:
           Value: true
-        uav1/basler_right_optical/tag_1:
-          Value: false
-        uav1/basler_right_optical/tag_10:
-          Value: false
-        uav1/basler_right_optical/tag_11:
+        uav2/basler_left_optical/tag_4:
           Value: true
-        uav1/basler_right_optical/tag_2:
+        uav2/basler_left_optical/tag_5:
           Value: true
-        uav1/basler_right_optical/tag_3:
-          Value: false
-        uav1/basler_right_optical/tag_4:
-          Value: false
-        uav1/basler_right_optical/tag_5:
-          Value: false
-        uav1/basler_right_optical/tag_6:
-          Value: false
-        uav1/basler_right_optical/tag_7:
-          Value: false
-        uav1/basler_right_optical/tag_8:
-          Value: false
-        uav1/basler_right_optical/tag_9:
+        uav2/basler_left_optical/tag_6:
           Value: true
-        uav1/basler_right_optical_corrected:
+        uav2/basler_left_optical/tag_7:
           Value: true
-        uav1/basler_stereopair/base:
+        uav2/basler_left_optical/tag_8:
           Value: true
-        uav1/tag_modified0:
+        uav2/basler_left_optical/tag_9:
           Value: true
-        uav1/tag_modified1:
-          Value: false
-        uav1/tag_modified10:
-          Value: false
-        uav1/tag_modified11:
+        uav2/basler_right_optical:
           Value: true
-        uav1/tag_modified2:
+        uav2/basler_right_optical/my_bundle:
+          Value: false
+        uav2/basler_right_optical/tag_0:
+          Value: false
+        uav2/basler_right_optical/tag_1:
+          Value: false
+        uav2/basler_right_optical/tag_10:
+          Value: false
+        uav2/basler_right_optical/tag_11:
+          Value: false
+        uav2/basler_right_optical/tag_2:
+          Value: false
+        uav2/basler_right_optical/tag_3:
+          Value: false
+        uav2/basler_right_optical/tag_4:
+          Value: false
+        uav2/basler_right_optical/tag_5:
+          Value: false
+        uav2/basler_right_optical/tag_6:
+          Value: false
+        uav2/basler_right_optical/tag_7:
+          Value: false
+        uav2/basler_right_optical/tag_8:
+          Value: false
+        uav2/basler_right_optical/tag_9:
+          Value: false
+        uav2/basler_right_optical_corrected:
           Value: true
-        uav1/tag_modified3:
-          Value: false
-        uav1/tag_modified4:
-          Value: false
-        uav1/tag_modified5:
-          Value: false
-        uav1/tag_modified6:
-          Value: false
-        uav1/tag_modified7:
-          Value: false
-        uav1/tag_modified8:
-          Value: false
-        uav1/tag_modified9:
+        uav2/basler_stereopair/base:
+          Value: true
+        uav2/tag_modified0:
+          Value: true
+        uav2/tag_modified1:
+          Value: true
+        uav2/tag_modified10:
+          Value: true
+        uav2/tag_modified11:
+          Value: true
+        uav2/tag_modified2:
+          Value: true
+        uav2/tag_modified3:
+          Value: true
+        uav2/tag_modified4:
+          Value: true
+        uav2/tag_modified5:
+          Value: true
+        uav2/tag_modified6:
+          Value: true
+        uav2/tag_modified7:
+          Value: true
+        uav2/tag_modified8:
+          Value: true
+        uav2/tag_modified9:
           Value: true
       Marker Alpha: 1
       Marker Scale: 0.5
@@ -155,93 +157,93 @@ Visualization Manager:
       Show Axes: true
       Show Names: false
       Tree:
-        uav1/basler_stereopair/base:
-          uav1/basler_left_optical:
-            uav1/basler_left_optical/my_bundle:
+        uav2/basler_stereopair/base:
+          uav2/basler_left_optical:
+            uav2/basler_left_optical/my_bundle:
               {}
-            uav1/basler_left_optical/tag_0:
+            uav2/basler_left_optical/tag_0:
               tag_base:
                 {}
-            uav1/basler_left_optical/tag_1:
+            uav2/basler_left_optical/tag_1:
               {}
-            uav1/basler_left_optical/tag_10:
+            uav2/basler_left_optical/tag_10:
               {}
-            uav1/basler_left_optical/tag_11:
+            uav2/basler_left_optical/tag_11:
               {}
-            uav1/basler_left_optical/tag_2:
+            uav2/basler_left_optical/tag_2:
               {}
-            uav1/basler_left_optical/tag_3:
+            uav2/basler_left_optical/tag_3:
               {}
-            uav1/basler_left_optical/tag_4:
+            uav2/basler_left_optical/tag_4:
               {}
-            uav1/basler_left_optical/tag_5:
+            uav2/basler_left_optical/tag_5:
               {}
-            uav1/basler_left_optical/tag_6:
+            uav2/basler_left_optical/tag_6:
               {}
-            uav1/basler_left_optical/tag_7:
+            uav2/basler_left_optical/tag_7:
               {}
-            uav1/basler_left_optical/tag_8:
+            uav2/basler_left_optical/tag_8:
               {}
-            uav1/basler_left_optical/tag_9:
+            uav2/basler_left_optical/tag_9:
               {}
-          uav1/basler_right_optical:
-            uav1/basler_right_optical/my_bundle:
+          uav2/basler_right_optical:
+            uav2/basler_right_optical/my_bundle:
               {}
-            uav1/basler_right_optical/tag_0:
+            uav2/basler_right_optical/tag_0:
               {}
-            uav1/basler_right_optical/tag_1:
+            uav2/basler_right_optical/tag_1:
               {}
-            uav1/basler_right_optical/tag_10:
+            uav2/basler_right_optical/tag_10:
               {}
-            uav1/basler_right_optical/tag_11:
+            uav2/basler_right_optical/tag_11:
               {}
-            uav1/basler_right_optical/tag_2:
+            uav2/basler_right_optical/tag_2:
               {}
-            uav1/basler_right_optical/tag_3:
+            uav2/basler_right_optical/tag_3:
               {}
-            uav1/basler_right_optical/tag_4:
+            uav2/basler_right_optical/tag_4:
               {}
-            uav1/basler_right_optical/tag_5:
+            uav2/basler_right_optical/tag_5:
               {}
-            uav1/basler_right_optical/tag_6:
+            uav2/basler_right_optical/tag_6:
               {}
-            uav1/basler_right_optical/tag_7:
+            uav2/basler_right_optical/tag_7:
               {}
-            uav1/basler_right_optical/tag_8:
+            uav2/basler_right_optical/tag_8:
               {}
-            uav1/basler_right_optical/tag_9:
+            uav2/basler_right_optical/tag_9:
               {}
-          uav1/basler_right_optical_corrected:
-            uav1/tag_modified0:
+          uav2/basler_right_optical_corrected:
+            uav2/tag_modified0:
               {}
-            uav1/tag_modified1:
+            uav2/tag_modified1:
               {}
-            uav1/tag_modified10:
+            uav2/tag_modified10:
               {}
-            uav1/tag_modified11:
+            uav2/tag_modified11:
               {}
-            uav1/tag_modified2:
+            uav2/tag_modified2:
               {}
-            uav1/tag_modified3:
+            uav2/tag_modified3:
               {}
-            uav1/tag_modified4:
+            uav2/tag_modified4:
               {}
-            uav1/tag_modified5:
+            uav2/tag_modified5:
               {}
-            uav1/tag_modified6:
+            uav2/tag_modified6:
               {}
-            uav1/tag_modified7:
+            uav2/tag_modified7:
               {}
-            uav1/tag_modified8:
+            uav2/tag_modified8:
               {}
-            uav1/tag_modified9:
+            uav2/tag_modified9:
               {}
       Update Interval: 0
       Value: true
     - Class: rviz/Camera
       Enabled: true
       Image Rendering: background and overlay
-      Image Topic: /uav1/basler_right/image_rect
+      Image Topic: /uav2/fleft/camera/image_rect
       Name: Camera
       Overlay Alpha: 0.5
       Queue Size: 2
@@ -257,7 +259,7 @@ Visualization Manager:
     - Class: rviz/Camera
       Enabled: true
       Image Rendering: background and overlay
-      Image Topic: /uav1/basler_left/image_rect
+      Image Topic: /uav2/fright/camera/image_rect
       Name: Camera
       Overlay Alpha: 0.5
       Queue Size: 2
@@ -274,7 +276,7 @@ Visualization Manager:
   Global Options:
     Background Color: 48; 48; 48
     Default Light: true
-    Fixed Frame: uav1/basler_stereopair/base
+    Fixed Frame: uav2/basler_stereopair/base
     Frame Rate: 30
   Name: root
   Tools:
@@ -298,7 +300,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 1.7881054878234863
+      Distance: 1.5271997451782227
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -306,27 +308,27 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 0.5726319551467896
-        Y: -0.12203660607337952
-        Z: -0.036309774965047836
+        X: 0.37298721075057983
+        Y: -0.11651843786239624
+        Z: -0.03635033592581749
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.36479705572128296
+      Pitch: 0.07479701936244965
       Target Frame: <Fixed Frame>
-      Yaw: 3.5807740688323975
+      Yaw: 1.2789585590362549
     Saved: ~
 Window Geometry:
   Camera:
     collapsed: false
   Displays:
     collapsed: false
-  Height: 1024
+  Height: 1046
   Hide Left Dock: false
   Hide Right Dock: false
-  QMainWindow State: 000000ff00000000fd0000000400000000000001b100000366fc020000000afb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afc0000003b0000018e000000e20100001afa000000000100000002fb0000000c00430061006d0065007200610100000000ffffffff0000006200fffffffb000000100044006900730070006c0061007900730100000000000001b10000015600fffffffb0000000a0049006d00610067006500000001e9000001f00000000000000000fb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb0000000c00430061006d00650072006101000001cf000001d20000001600ffffff00000001000004580000039efc0200000007fb0000000c00430061006d006500720061000000003b000001930000000000000000fb0000000c00430061006d006500720061000000003b0000039e0000000000000000fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073000000003b0000028a000000a000fffffffb0000000c00430061006d006500720061010000003b000001bf0000000000000000fb0000000c00430061006d0065007200610100000200000001d90000000000000000fb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000774000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000007740000003efc0100000002fb0000000800540069006d00650100000000000007740000023f00fffffffb0000000800540069006d00650100000000000004500000000000000000000005bd0000036600000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd00000004000000000000026b0000037cfc020000000afb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afc0000003b00000198000000e20100001afa000000000100000002fb0000000c00430061006d0065007200610100000000ffffffff0000006200fffffffb000000100044006900730070006c0061007900730100000000000001b10000015600fffffffb0000000a0049006d00610067006500000001e9000001f00000000000000000fb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb0000000c00430061006d00650072006101000001d9000001de0000001600ffffff00000001000004580000039efc0200000007fb0000000c00430061006d006500720061000000003b000001930000000000000000fb0000000c00430061006d006500720061000000003b0000039e0000000000000000fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073000000003b0000028a000000a000fffffffb0000000c00430061006d006500720061010000003b000001bf0000000000000000fb0000000c00430061006d0065007200610100000200000001d90000000000000000fb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000774000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000007740000003efc0100000002fb0000000800540069006d00650100000000000007740000023f00fffffffb0000000800540069006d00650100000000000004500000000000000000000005030000037c00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Selection:
     collapsed: false
   Time:
@@ -336,5 +338,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1908
-  X: 5
+  X: 1085
   Y: 27

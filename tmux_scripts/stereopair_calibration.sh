@@ -10,7 +10,7 @@ cd "$SCRIPTPATH"
 rm .tmuxinator.yml
 
 # link the session file to .tmuxinator.yml
-ln calibration_session.yml .tmuxinator.yml
+ln stereo_calib_session.yml .tmuxinator.yml
 
 # start tmuxinator
 tmuxinator

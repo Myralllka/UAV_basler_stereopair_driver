@@ -8,19 +8,11 @@ windows:
       layout: tiled
       panes:
         - roscore
-  - rviz:
-      layout: tiled
-      panes:
-        - waitForRos; roscd basler_stereopair_driver; ./scripts/change_uav.sh ${UAV_NAME}; rviz -d $(rospack find basler_stereopair_driver)/rviz/calibration.rviz
   - pylon_camera_driver:
       layout: tiled
       panes:
         - waitForRos; roslaunch pylon_camera morhunenko.launch
-  - basler_stereo_driver:
+  - camcalib:
       layout: tiled
       panes:
-        - waitForRos; roslaunch basler_stereopair_driver basler_stereopair_driver.launch is_calibrated:=false
-  - COMPLETE_CALIB: 
-      layout: tiled
-      panes: 
-        - history -s 'rostopic pub -1 "/${UAV_NAME}/basler_stereo_driver/$UAV_NAME/complete" std_msgs/Bool True'
+        - waitForRos; rosrun camera_calibration cameracalibrator.py --size 6x8 --square 0.052 image:=/${UAV_NAME}/fright/camera/image_raw camera:=/${UAV_NAME}/fright/camera  --fisheye-recompute-extrinsicsts

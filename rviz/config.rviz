@@ -67,13 +67,13 @@ Visualization Manager:
         All Enabled: false
         tag_base:
           Value: true
-        uav6/basler_left_optical:
+        uav2/basler_left_optical:
           Value: true
-        uav6/basler_left_optical/tag_0:
+        uav2/basler_left_optical/tag_0:
           Value: true
-        uav6/basler_right_optical:
+        uav2/basler_right_optical:
           Value: true
-        uav6/basler_stereopair/base:
+        uav2/basler_stereopair/base:
           Value: true
       Marker Alpha: 1
       Marker Scale: 0.5
@@ -82,16 +82,16 @@ Visualization Manager:
       Show Axes: true
       Show Names: false
       Tree:
-        uav6/basler_stereopair/base:
-          uav6/basler_left_optical:
+        uav2/basler_stereopair/base:
+          uav2/basler_left_optical:
             {}
-          uav6/basler_right_optical:
+          uav2/basler_right_optical:
             {}
       Update Interval: 0
       Value: true
     - Class: rviz/Image
       Enabled: true
-      Image Topic: /uav1/camera_localization/im_corresp
+      Image Topic: /uav2/camera_localization/im_corresp
       Max Value: 1
       Median window: 5
       Min Value: 0
@@ -124,7 +124,7 @@ Visualization Manager:
       Size (Pixels): 20
       Size (m): 0.009999999776482582
       Style: Points
-      Topic: /uav1/camera_localization/tdpts
+      Topic: /uav2/camera_localization/tdpts
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
@@ -132,7 +132,7 @@ Visualization Manager:
     - Class: rviz/Camera
       Enabled: true
       Image Rendering: background and overlay
-      Image Topic: /uav1/basler_right/image_rect
+      Image Topic: /uav2/basler_right/image_rect
       Name: Camera
       Overlay Alpha: 0.5
       Queue Size: 2
@@ -151,7 +151,7 @@ Visualization Manager:
     - Class: rviz/Camera
       Enabled: true
       Image Rendering: background and overlay
-      Image Topic: /uav1/basler_left/image_rect
+      Image Topic: /uav2/basler_left/image_rect
       Name: Camera
       Overlay Alpha: 0.5
       Queue Size: 2
@@ -169,7 +169,7 @@ Visualization Manager:
       Zoom Factor: 1
     - Class: rviz/MarkerArray
       Enabled: true
-      Marker Topic: /uav1/camera_localization/markerarray
+      Marker Topic: /uav2/camera_localization/markerarray
       Name: MarkerArray
       Namespaces:
         {}
@@ -177,7 +177,7 @@ Visualization Manager:
       Value: true
     - Class: rviz/MarkerArray
       Enabled: true
-      Marker Topic: /uav1/camera_localization/plane
+      Marker Topic: /uav2/camera_localization/plane
       Name: MarkerArray
       Namespaces:
         {}
@@ -187,7 +187,7 @@ Visualization Manager:
   Global Options:
     Background Color: 48; 48; 48
     Default Light: true
-    Fixed Frame: uav6/basler_stereopair/base
+    Fixed Frame: uav2/basler_stereopair/base
     Frame Rate: 30
   Name: root
   Tools:
