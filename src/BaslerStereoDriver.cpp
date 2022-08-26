@@ -374,7 +374,7 @@ namespace basler_stereo_driver {
         if (not m_is_initialized) return;
         geometry_msgs::TransformStamped fleft_pose_stamped = tf2::eigenToTransform(m_fright_pose);
         fleft_pose_stamped.header.frame_id = m_name_base;
-        fleft_pose_stamped.child_frame_id = m_name_CR;
+        fleft_pose_stamped.child_frame_id = m_uav_name + "/basler_right_optical";
         fleft_pose_stamped.header.stamp = ros::Time::now();
         m_tbroadcaster.sendTransform(fleft_pose_stamped);
     }
