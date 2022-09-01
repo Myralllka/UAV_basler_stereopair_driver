@@ -132,21 +132,14 @@ namespace basler_stereo_driver {
             auto fright_rotation = pl.loadMatrixStatic2<3, 3>("fright_camera/rotation");
             auto fright_translation = pl.loadMatrixStatic2<3, 1>("fright_camera/translation");
 
-            m_fright_pose.translate(fright_translation).rotate(Eigen::Quaterniond{fright_rotation});
+            m_fright_pose_frame.translate(fright_translation)
+                    .rotate(Eigen::Quaterniond{fright_rotation})
+                    .rotate(Eigen::Quaterniond{0.5, 0.5, -0.5, 0.5});
+            m_fright_pose.rotate(Eigen::Quaterniond{0.5, -0.5, 0.5, -0.5});
             m_tim_fright_pose = nh.createTimer(ros::Duration(0.0001),
                                                &BaslerStereoDriver::m_tim_cbk_fright_pose,
                                                this);
-            // for epipolar lines drawing I'll use subscriber handler
-//            mrs_lib::construct_object(m_handler_imleft,
-//                                      shopt,
-//                                      "/" + m_uav_name + "/fleft/tag_detections_image");
-//                                      "/" + m_uav_name + "/fleft/camera/image_rect");
-//            mrs_lib::construct_object(m_handler_imright,
-//                                      shopt,
-//                                      "/" + m_uav_name + "/fright/tag_detections_image");
-//                                      "/" + m_uav_name + "/fright/camera/image_rect");
         }
-        // needed
         ROS_INFO_ONCE("[%s]: initialized", NODENAME.c_str());
         m_is_initialized = true;
     }
@@ -372,11 +365,18 @@ namespace basler_stereo_driver {
     void BaslerStereoDriver::m_tim_cbk_fright_pose([[maybe_unused]] const ros::TimerEvent &ev) {
         // publish right camera pose (when camera pair is already calibrated)
         if (not m_is_initialized) return;
-        geometry_msgs::TransformStamped fleft_pose_stamped = tf2::eigenToTransform(m_fright_pose);
-        fleft_pose_stamped.header.frame_id = m_name_base;
-        fleft_pose_stamped.child_frame_id = m_uav_name + "/basler_right_optical";
-        fleft_pose_stamped.header.stamp = ros::Time::now();
-        m_tbroadcaster.sendTransform(fleft_pose_stamped);
+
+        geometry_msgs::TransformStamped fright_frame = tf2::eigenToTransform(m_fright_pose_frame);
+        fright_frame.header.frame_id = m_name_base;
+        fright_frame.child_frame_id = m_uav_name + "/basler_right_frame";
+        fright_frame.header.stamp = ros::Time::now();
+        m_tbroadcaster.sendTransform(fright_frame);
+
+        geometry_msgs::TransformStamped fright_pose_stamped = tf2::eigenToTransform(m_fright_pose);
+        fright_pose_stamped.header.frame_id = m_uav_name + "/basler_right_frame";
+        fright_pose_stamped.child_frame_id = m_uav_name + "/basler_right_optical";
+        fright_pose_stamped.header.stamp = ros::Time::now();
+        m_tbroadcaster.sendTransform(fright_pose_stamped);
     }
 
     void BaslerStereoDriver::m_tim_cbk_tagcoor([[maybe_unused]] const ros::TimerEvent &ev) {
